@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مافيا أونلاين - النسخة الاحترافية</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: white; text-align: center; margin: 0; padding: 20px; transition: 1s; }
+        .night-mode { background: #000 !important; }
+        .box { background: #16213e; padding: 20px; border-radius: 15px; max-width: 500px; margin: auto; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        
+        /* تصميم العداد التنازلي */
+        #timerBox { 
+            font-size: 2.5em; font-weight: bold; color: #e94560; 
+            background: #0f3460; padding: 10px 25px; border-radius: 50px; 
+            display: inline-block; margin-bottom: 15px; border: 3px solid #e94560;
+        }
+
+        #chatBox { height: 200px; background: rgba(0,0,0,0.3); overflow-y: scroll; margin: 15px 0; padding: 10px; text-align: right; border-radius: 8px; border: 1px solid #333; }
+        input { width: 85%; padding: 12px; margin: 10px; border-radius: 8px; border: none; font-size: 16px; }
+        button { padding: 12px 20px; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; margin: 5px; }
+        .btn-main { background: #e94560; color: white; }
+        #phaseIndicator { background: #f1c40f; color: #000; padding: 10px; border-radius: 8px; font-weight: bold; }
+        .action-btn { background: #3498db; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <div id="setup">
+        <h2 style="color: #e94560;">🚪 دخول الغرفة</h2>
+        <input type="text" id="nameIn" placeholder="اسمك">
+        <input type="text" id="roomIn" placeholder="اسم الغرفة">
+        <input type="password" id="passIn" placeholder="كلمة السر">
+        <button class="btn-main" onclick="joinGame()">دخول / إنشاء</button>
+    </div>
+
+    <div id="gameArea" style="display:none;">
+        <div id="timerBox">07:00</div>
+        <div id="phaseIndicator">في انتظار اكتمال العدد (4 لاعبين)...</div>
+        <div id="roleDisplay" style="font-size:1.4em; margin:15px; color:#f1c40f;"></div>
+        
+        <div id="chatBox"></div>
+        <input type="text" id="msgIn" placeholder="اكتب رسالة...">
+        <button class="btn-main" onclick="sendMsg()">إرسال</button>
+
+        <div id="playerButtons" style="margin-top: 20px;"></div>
+    </div>
+</div>
+
+<script>
+    const socket = io();
+    let myName, myRole, myPeer, myStream;
+
+    function joinGame() {
+        myName = document.getElementById('nameIn').value;
+        let room = document.getElementById('roomIn').value;
+        let pass = document.getElementById('passIn').value;
+        if(!myName || !room || !pass) return alert("يرجى إكمال البيانات!");
+
+        myPeer = new Peer();
+        myPeer.on('open', (id) => {
+            socket.emit('playerJoined', { name: myName, peerId: id, roomName: room, roomPass: pass });
+        });
+        myPeer.on('call', (c) => { 
+            c.answer(myStream); 
+            const a = document.createElement('audio'); 
+            c.on('stream', (s) => { a.srcObject = s; a.play(); }); 
+        });
+    }
+
+    // تحديث العداد التنازلي من السيرفر
+    socket.on('timerUpdate', (seconds) => {
+        let m = Math.floor(seconds / 60);
+        let s = seconds % 60;
+        let display = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        const tBox = document.getElementById('timerBox');
+        tBox.innerText = display;
+        
+        // تغيير اللون للأحمر في آخر 10 ثوانٍ
+        tBox.style.color = (seconds <= 10) ? "#ff0000" : "#e94560";
+        tBox.style.borderColor = (seconds <= 10) ? "#ff0000" : "#e94560";
+    });
+
+    socket.on('assignRole', (role) => {
+        myRole = role;
+        document.getElementById('setup').style.display = "none";
+        document.getElementById('gameArea').style.display = "block";
+        document.getElementById('roleDisplay').innerText = "دورك: " + role;
+    });
+
+    socket.on('phaseChange', (data) => {
+        document.getElementById('phaseIndicator').innerText = data.msg;
+        if(data.phase === "night") document.body.classList.add('night-mode');
+        else document.body.classList.remove('night-mode');
+    });
+
+    socket.on('updatePlayerList', (players) => {
+        const area = document.getElementById('playerButtons');
+        area.innerHTML = "";
+        const isNight = document.body.classList.contains('night-mode');
+
+        players.forEach(p => {
+            if (p.name !== myName && p.alive) {
+                const b = document.createElement('button');
+                b.className = "action-btn";
+                if (isNight) {
+                    if (myRole.includes("مافيا")) {
+                        b.innerText = "🎯 قتل " + p.name;
+                        b.onclick = () => { socket.emit('mafiaKill', p.name); area.innerHTML="✅ تم الاختيار"; };
+                    } else if (myRole.includes("طبيب")) {
+                        b.innerText = "🛡️ حماية " + p.name;
+                        b.onclick = () => { socket.emit('doctorProtect', p.name); area.innerHTML="✅ تم تفعيل الدرع"; };
+                    } else if (myRole.includes("شرطة")) {
+                        b.innerText = "🔍 فحص " + p.name;
+                        b.onclick = () => { socket.emit('policeInvestigate', p.name); area.innerHTML="✅ تم طلب الفحص"; };
+                    } else return;
+                } else {
+                    b.innerText = "تصويت ضد " + p.name;
+                    b.onclick = () => { b.disabled = true; b.innerText = "✅ صوتّت"; };
+                }
+                area.appendChild(b);
+            }
+        });
+    });
+
+    socket.on('receiveMessage', (d) => {
+        const b = document.getElementById('chatBox');
+        b.innerHTML += `<p><b>${d.user}:</b> ${d.msg}</p>`;
+        b.scrollTop = b.scrollHeight;
+    });
+
+    function sendMsg() {
+        const i = document.getElementById('msgIn');
+        if(i.value) socket.emit('newMessage', { user: myName, msg: i.value });
+        i.value = "";
+    }
+
+    socket.on('errorMsg', (m) => alert(m));
+</script>
+</body>
+</html>
