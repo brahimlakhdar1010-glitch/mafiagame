@@ -7,7 +7,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static(__dirname)); // لتشغيل ملف index.html
-
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
 // مصفوفة اللاعبين والأدوار من كودك
 const roles = ["مافيا 👤", "طبيب 🧑‍⚕️", "شرطة 👮", "مواطن 👤", "مواطن 👤"];
 let players = ["عمر", "سارة", "ياسين", "أمين", "لخضر"];
@@ -25,3 +27,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`السيرفر يعمل على المنفذ ${PORT}`);
 });
+
+module.exports = app; // أضف هذا السطر في نهاية الملف تماماً
