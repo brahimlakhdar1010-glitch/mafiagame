@@ -24,10 +24,11 @@ io.on('connection', (socket) => {
         rd.players.push({ id: socket.id, name, isAlive: true, role: null });
         io.to(room).emit('updatePlayers', rd.players);
 
-        // يبدأ العد التنازلي إذا دخل لاعبين (2) أو أكثر
-        if (rd.players.length >= 2 && !rd.timerStarted) {
-            startWaitingTimer(room);
-        }
+        if (rd.players.length >= 2 && !rd.timerStarted) startWaitingTimer(room);
+    });
+
+    socket.on('signal', (data) => {
+        io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
     });
 
     socket.on('nightAction', ({ room, targetId, type }) => {
@@ -38,14 +39,14 @@ io.on('connection', (socket) => {
         if (type === "check") {
             const target = rd.players.find(p => p.id === targetId);
             const isMafia = target && target.role.includes("مافيا");
-            socket.emit('newMessage', { sender: "النظام", text: `النتيجة: ${target.name} ${isMafia ? "هو مافيا بالفعل! 🕵️" : "مواطن بريء ✅"}` });
+            socket.emit('newMessage', { sender: "النظام", text: `نتيجة التحقيق: ${target.name} ${isMafia ? "هو مافيا! 🕵️" : "مواطن بريء ✅"}` });
         }
     });
 
     socket.on('submitVote', ({ room, targetId }) => {
         const rd = rooms[room];
         if (rd && rd.phase === "day") {
-            rd.votes[targetId] = (rd.votes[targetId] || 0) + 1;
+            rd.votes[socket.id] = targetId;
             io.to(room).emit('newMessage', { sender: "النظام", text: "تم تسجيل صوت جديد ضد أحد المشتبه بهم." });
         }
     });
@@ -56,33 +57,26 @@ io.on('connection', (socket) => {
     });
 });
 
-// هذه الوظيفة كانت ناقصة في كودك وهي المسؤولة عن بدء اللعبة فعلياً
 function startWaitingTimer(room) {
     const rd = rooms[room];
     rd.timerStarted = true;
-    let timeLeft = 45; // مدة الانتظار 45 ثانية
-
+    let timeLeft = 45;
     const interval = setInterval(() => {
         if (timeLeft > 0) {
             io.to(room).emit('newMessage', { sender: "النظام", text: `ستبدأ اللعبة خلال ${timeLeft} ثانية...` });
-            timeLeft -= 15; // نرسل تنبيه كل 15 ثانية
+            timeLeft -= 15;
         } else {
             clearInterval(interval);
-            if (rd.players.length >= 2) {
-                startGame(room);
-            } else {
-                rd.timerStarted = false;
-                io.to(room).emit('newMessage', { sender: "النظام", text: "فشل بدء اللعبة، نحتاج للاعبين على الأقل." });
-            }
+            if (rd.players.length >= 2) startGame(room);
+            else rd.timerStarted = false;
         }
     }, 15000); 
 }
 
 function startGame(room) {
     const rd = rooms[room];
-    const count = rd.players.length;
     let roles = ["مافيا 👤", "طبيب 🧑‍⚕️", "شرطة 👮"];
-    while (roles.length < count) roles.push("مواطن 👤");
+    while (roles.length < rd.players.length) roles.push("مواطن 👤");
     roles = roles.sort(() => Math.random() - 0.5);
 
     rd.players.forEach((p, i) => {
@@ -97,10 +91,8 @@ function startPhase(room, phase) {
     if (!rd) return;
     rd.phase = phase;
     rd.votes = {};
-    const duration = phase === "night" ? 60 : 300; // ليل دقيقة ونهار 5 دقائق
-    
-    const msg = phase === "night" ? "🌃 حل الليل.. نام الجميع. المافيا والشرطة والطبيب يتحركون." : "☀️ طلع النهار.. استيقظوا للنقاش والتصويت (5 دقائق).";
-    io.to(room).emit('phaseChange', { phase, msg });
+    const duration = phase === "night" ? 60 : 300; 
+    io.to(room).emit('phaseChange', { phase, msg: phase === "night" ? "🌃 حل الليل.. نام الجميع." : "☀️ طلع النهار.. استعدوا للتصويت.", players: rd.players });
 
     setTimeout(() => {
         if (phase === "night") endNight(room);
@@ -115,31 +107,44 @@ function endNight(room) {
 
     if (killedId && killedId !== savedId) {
         const victim = rd.players.find(p => p.id === killedId);
-        if (victim) {
-            victim.isAlive = false;
-            io.to(room).emit('newMessage', { sender: "النظام", text: `للأسف، قتلت المافيا ${victim.name} في هذه الليلة.` });
-        }
+        if (victim) victim.isAlive = false;
+        io.to(room).emit('newMessage', { sender: "النظام", text: `للأسف، قتلت المافيا ${victim ? victim.name : "أحدهم"}.` });
     } else if (killedId && killedId === savedId) {
-        const lucky = rd.players.find(p => p.id === killedId);
-        io.to(room).emit('newMessage', { sender: "النظام", text: `خبر عاجل! حاولت المافيا قتل ${lucky.name} ولكن الطبيب أنقذه! 🏥` });
-    } else {
-        io.to(room).emit('newMessage', { sender: "النظام", text: "مرت الليلة بسلام." });
+        io.to(room).emit('newMessage', { sender: "النظام", text: "حاولت المافيا القتل ولكن الطبيب أنقذ الضحية! 🏥" });
     }
     rd.nightActions = { killed: null, saved: null };
-    startPhase(room, "day");
+    if (!checkGameOver(room)) startPhase(room, "day");
 }
 
 function endDay(room) {
     const rd = rooms[room];
-    let victimId = Object.keys(rd.votes).reduce((a, b) => rd.votes[a] > rd.votes[b] ? a : b, null);
+    let voteCounts = {};
+    Object.values(rd.votes).forEach(id => voteCounts[id] = (voteCounts[id] || 0) + 1);
+    let victimId = Object.keys(voteCounts).reduce((a, b) => voteCounts[a] > voteCounts[b] ? a : b, null);
+    
     if (victimId) {
         const victim = rd.players.find(p => p.id === victimId);
         if (victim) {
             victim.isAlive = false;
-            io.to(room).emit('newMessage', { sender: "النظام", text: `تم إعدام ${victim.name} بناءً على تصويت الجماعة.` });
+            io.to(room).emit('newMessage', { sender: "النظام", text: `بناءً على أغلبية الأصوات، تم إقصاء ${victim.name}.` });
         }
     }
-    startPhase(room, "night");
+    if (!checkGameOver(room)) startPhase(room, "night");
+}
+
+function checkGameOver(room) {
+    const rd = rooms[room];
+    const mafia = rd.players.filter(p => p.isAlive && p.role.includes("مافيا")).length;
+    const citizens = rd.players.filter(p => p.isAlive && !p.role.includes("مافيا")).length;
+
+    if (mafia === 0) {
+        io.to(room).emit('newMessage', { sender: "النظام", text: "🎉 مبروك! فاز المواطنون وتم إبادة المافيا." });
+        return true;
+    } else if (mafia >= citizens) {
+        io.to(room).emit('newMessage', { sender: "النظام", text: "💀 خسر المواطنون.. المافيا تسيطر على المدينة." });
+        return true;
+    }
+    return false;
 }
 
 server.listen(process.env.PORT || 3000);
