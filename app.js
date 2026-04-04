@@ -37,10 +37,7 @@ io.on('connection', (socket) => {
             const target = rd.players.find(p => p.id === targetId);
             if (voter && target && voter.isAlive) {
                 rd.votes[socket.id] = targetId;
-                io.to(room).emit('newMessage', { 
-                    sender: "النظام", 
-                    text: `📢 اللاعب ${voter.name} صوّت ضد ${target.name}` 
-                });
+                io.to(room).emit('newMessage', { sender: "النظام", text: `📢 اللاعب ${voter.name} صوّت ضد ${target.name}` });
             }
         }
     });
@@ -49,8 +46,6 @@ io.on('connection', (socket) => {
         const rd = rooms[room];
         if (rd.phase !== "night") return;
         const actor = rd.players.find(p => p.id === socket.id);
-        
-        // تعديل: المافيا تقتل، الطبيب يحمي، والشرطة فقط تسأل
         if (type === "kill" && actor.role.includes("مافيا")) rd.nightActions.killed = targetId;
         if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId;
         if (type === "check" && actor.role.includes("شرطة")) {
@@ -69,17 +64,16 @@ io.on('connection', (socket) => {
 function startWaitingTimer(room) {
     const rd = rooms[room];
     rd.timerStarted = true;
-    let timeLeft = 45;
+    let timeLeft = 30;
     const interval = setInterval(() => {
-        if (timeLeft > 0) {
-            io.to(room).emit('newMessage', { sender: "النظام", text: `ستبدأ اللعبة خلال ${timeLeft} ثانية...` });
-            timeLeft -= 15;
-        } else {
+        io.to(room).emit('timerUpdate', timeLeft);
+        if (timeLeft <= 0) {
             clearInterval(interval);
             if (rd.players.length >= 2) startGame(room);
             else rd.timerStarted = false;
         }
-    }, 15000); 
+        timeLeft--;
+    }, 1000);
 }
 
 function startGame(room) {
@@ -99,27 +93,32 @@ function startPhase(room, phase) {
     if (!rd) return;
     rd.phase = phase;
     rd.votes = {};
-    const duration = phase === "night" ? 60 : 300; 
-    io.to(room).emit('phaseChange', { phase, msg: phase === "night" ? "🌃 الليل: المافيا والشرطة والطبيب يتحركون." : "☀️ النهار: وقت النقاش والتصويت العلني.", players: rd.players });
-    setTimeout(() => {
-        if (phase === "night") endNight(room);
-        else endDay(room);
-    }, duration * 1000);
+    let timeLeft = phase === "night" ? 60 : 180; // الليل دقيقة والنهار 3 دقائق
+    
+    io.to(room).emit('phaseChange', { phase, msg: phase === "night" ? "🌃 حل الليل.. وقت الغموض." : "☀️ طلع النهار.. وقت التصويت.", players: rd.players });
+
+    const interval = setInterval(() => {
+        io.to(room).emit('timerUpdate', timeLeft);
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            if (phase === "night") endNight(room);
+            else endDay(room);
+        }
+        timeLeft--;
+    }, 1000);
 }
 
 function endNight(room) {
     const rd = rooms[room];
     let killedId = rd.nightActions.killed;
     let savedId = rd.nightActions.saved;
-
     if (killedId && killedId !== savedId) {
         const victim = rd.players.find(p => p.id === killedId);
         if (victim) victim.isAlive = false;
-        io.to(room).emit('newMessage', { sender: "النظام", text: `💀 استيقظت المدينة على خبر مقتل ${victim ? victim.name : "أحدهم"}.` });
+        io.to(room).emit('newMessage', { sender: "النظام", text: `💀 تم العثور على جثة ${victim ? victim.name : "أحدهم"}.` });
     } else if (killedId && killedId === savedId) {
         const savedPlayer = rd.players.find(p => p.id === savedId);
-        // تعديل: ذكر اسم الشخص الذي تعرض للحماية بنجاح
-        io.to(room).emit('newMessage', { sender: "النظام", text: `🏥 خبر عاجل: حاول المافيا قتل ${savedPlayer.name} ولكن الطبيب البطل تدخل وأنقذه! ✅` });
+        io.to(room).emit('newMessage', { sender: "النظام", text: `🏥 حاول المافيا قتل ${savedPlayer.name} ولكن الطبيب أنقذه! ✅` });
     }
     rd.nightActions = { killed: null, saved: null };
     if (!checkGameOver(room)) startPhase(room, "day");
@@ -136,23 +135,16 @@ function endDay(room) {
             victim.isAlive = false;
             io.to(room).emit('newMessage', { sender: "النظام", text: `⚖️ تم إعدام ${victim.name} بأغلبية الأصوات.` });
         }
-    } else {
-        io.to(room).emit('newMessage', { sender: "النظام", text: "🕊️ لم يتم الاتفاق على إقصاء أحد اليوم." });
     }
     if (!checkGameOver(room)) startPhase(room, "night");
 }
 
 function checkGameOver(room) {
     const rd = rooms[room];
-    const mafiaCount = rd.players.filter(p => p.isAlive && p.role.includes("مافيا")).length;
-    const citizensCount = rd.players.filter(p => p.isAlive && !p.role.includes("مافيا")).length;
-    if (mafiaCount === 0) {
-        io.to(room).emit('newMessage', { sender: "النظام", text: "🏆 فوز ساحق للمواطنين! تم القضاء على المافيا تماماً." });
-        return true;
-    } else if (mafiaCount >= citizensCount) {
-        io.to(room).emit('newMessage', { sender: "النظام", text: "😈 فازت المافيا.. لقد أحكموا سيطرتهم على المدينة." });
-        return true;
-    }
+    const mafia = rd.players.filter(p => p.isAlive && p.role.includes("مافيا")).length;
+    const citizens = rd.players.filter(p => p.isAlive && !p.role.includes("مافيا")).length;
+    if (mafia === 0) { io.to(room).emit('newMessage', { sender: "النظام", text: "🏆 فوز المواطنين!" }); return true; }
+    if (mafia >= citizens) { io.to(room).emit('newMessage', { sender: "النظام", text: "😈 فوز المافيا!" }); return true; }
     return false;
 }
 server.listen(process.env.PORT || 3000);
