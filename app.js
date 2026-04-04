@@ -41,8 +41,8 @@ io.on('connection', (socket) => {
     socket.on('nightAction', ({ room, targetId }) => {
         const rd = rooms[room];
         const player = rd.players.find(p => p.id === socket.id);
-        if (player.role.includes("مافيا")) rd.nightActions.killed = targetId;
-        if (player.role.includes("طبيب")) rd.nightActions.saved = targetId;
+        if (player.role && player.role.includes("مافيا")) rd.nightActions.killed = targetId;
+        if (player.role && player.role.includes("طبيب")) rd.nightActions.saved = targetId;
     });
 
     socket.on('sendMessage', ({ room, text }) => {
@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
         if (player && player.isAlive) io.to(room).emit('newMessage', { sender: player.name, text });
     });
 
-    socket.on('disconnect', () => { /* تنظيف الغرف */ });
+    socket.on('disconnect', () => { /* تنظيف الغرفة */ });
 });
 
 function startGame(room) {
@@ -70,7 +70,7 @@ function startPhase(room, phase, duration) {
     rd.nightActions = { killed: null, saved: null };
     
     const alivePlayers = rd.players.filter(p => p.isAlive);
-    const msg = phase === "night" ? "حل الليل، أغمضوا أعينكم. المافيا تختار ضحيتها الآن." : "طلع النهار، استيقظوا جميعاً للنقاش والتصويت.";
+    const msg = (phase === "night") ? "حل الليل، أغمضوا أعينكم. المافيا تختار ضحيتها الآن." : "طلع النهار، استيقظوا جميعاً للنقاش والتصويت.";
     
     io.to(room).emit('phaseChange', { phase, alivePlayers, msg });
 
@@ -82,11 +82,11 @@ function startPhase(room, phase, duration) {
 
 function endDay(room) {
     const rd = rooms[room];
-    let victimId = Object.keys(rd.votes).reduce((a, b) => rd.votes[a] > rd.votes[b] ? a : b, null);
+    let victimId = Object.keys(rd.votes).reduce((a, b) => (rd.votes[a] > rd.votes[b] ? a : b), null);
     if (victimId) {
         const victim = rd.players.find(p => p.id === victimId);
         victim.isAlive = false;
-        io.to(room).emit('newMessage', { sender: "النظام", text: تم إعدام ${victim.name} بناءً على تصويت الجماعة. });
+        io.to(room).emit('newMessage', { sender: "النظام", text: "تم إعدام " + victim.name + " بناءً على تصويت الجماعة." });
         io.to(victimId).emit('statusUpdate', 'dead');
     }
     startPhase(room, "night", 60);
@@ -98,7 +98,7 @@ function endNight(room) {
         const victim = rd.players.find(p => p.id === rd.nightActions.killed);
         victim.isAlive = false;
         io.to(victim.id).emit('statusUpdate', 'dead');
-        io.to(room).emit('newMessage', { sender: "النظام", text: للأسف، استيقظنا على خبر مقتل ${victim.name}. });
+        io.to(room).emit('newMessage', { sender: "النظام", text: "للأسف، استيقظنا على خبر مقتل " + victim.name + "." });
     } else {
         io.to(room).emit('newMessage', { sender: "النظام", text: "مرت الليلة بسلام ولم يمت أحد." });
     }
