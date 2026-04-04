@@ -1,62 +1,108 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mafia Voice Rooms</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
-    <style>
-        :root { --bg: #0f172a; --acc: #e94560; --txt: #f8fafc; }
-        body { background: var(--bg); color: var(--txt); font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
-        #login-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        #game-screen { display: none; width: 100%; max-width: 500px; height: 100%; flex-direction: column; padding: 15px; box-sizing: border-box; }
-        input { padding: 12px; border-radius: 8px; margin: 5px; border: none; width: 80%; }
-        button { padding: 12px; background: var(--acc); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        #status-bar { background: #fbbf24; color: #000; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; }
-        #chatBox { flex-grow: 1; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; overflow-y: auto; margin: 10px 0; border: 1px solid #334155; }
-        .player-btn { display: block; width: 100%; padding: 10px; margin: 5px 0; background: #1e293b; color: white; border: 1px solid var(--acc); border-radius: 5px; text-align: right; }
-        .dead { filter: grayscale(1); opacity: 0.5; pointer-events: none; }
-    </style>
-</head>
-<body>
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-    <div id="login-screen">
-        <h1>🎙️ مافيا - غرف وصوت</h1>
-        <input type="text" id="playerName" placeholder="اسمك المستعار">
-        <input type="text" id="roomNumber" placeholder="رقم الغرفة (مثلاً: 101)">
-        <button onclick="joinGame()">دخول الغرفة</button>
-    </div>
+app.use(express.static(__dirname));
 
-    <div id="game-screen">
-        <div id="status-bar">في انتظار اللاعبين...</div>
-        <div id="userRole" style="text-align:center; margin:10px; color:#60a5fa;">دورك: جاري التحديد...</div>
-        
-        <div id="action-pannel" style="display:none; background:#1e293b; padding:10px; border-radius:10px; border: 1px solid #475569;">
-            <p id="action-title" style="margin-top:0; font-size:0.9rem; color:#94a3b8;"></p>
-            <div id="players-list"></div>
-        </div>
+let rooms = {};
 
-        <div id="chatBox"></div>
-        <div style="display:flex; gap:5px;">
-            <input type="text" id="chatInput" placeholder="اكتب هنا..." style="flex-grow:1; margin:0;">
-            <button onclick="sendChat()">إرسال</button>
-        </div>
-    </div>
-
-    <script>
-        const socket = io();
-        let myName, currentRoom, myRole, isAlive = true, myStream;
-        const peers = {};
-
-        // وظيفة النطق الآلي
-        function speak(text) {
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'ar-SA';
-            window.speechSynthesis.speak(msg);
+io.on('connection', (socket) => {
+    socket.on('joinRoom', ({ room, name }) => {
+        socket.join(room);
+        if (!rooms[room]) {
+            rooms[room] = { players: [], phase: "waiting", votes: {}, nightActions: { killed: null, saved: null } };
         }
+        const rd = rooms[room];
+        rd.players.push({ id: socket.id, name, isAlive: true, role: null });
+        
+        io.to(room).emit('updatePlayers', rd.players);
+        socket.to(room).emit('user-connected', socket.id);
 
-        async function joinGame() {
-            myName = document.getElementById('playerName').value;
-            currentRoom = document.getElementById('roomNumber').value;
-            if (!myName || !currentRoom) return alert("يرجى إكمال البيانات");
+        if (rd.players.length === 4 && rd.phase === "waiting") {
+            startGame(room);
+        }
+    });
+
+    socket.on('signal', (data) => {
+        io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
+    });
+
+    socket.on('submitVote', ({ room, targetId }) => {
+        const rd = rooms[room];
+        if (rd && rd.phase === "day") {
+            rd.votes[targetId] = (rd.votes[targetId] || 0) + 1;
+            io.to(room).emit('newMessage', { sender: "النظام", text: "تم تسجيل صوت جديد." });
+        }
+    });
+
+    socket.on('nightAction', ({ room, targetId }) => {
+        const rd = rooms[room];
+        const player = rd.players.find(p => p.id === socket.id);
+        if (player.role.includes("مافيا")) rd.nightActions.killed = targetId;
+        if (player.role.includes("طبيب")) rd.nightActions.saved = targetId;
+    });
+
+    socket.on('sendMessage', ({ room, text }) => {
+        const player = rooms[room].players.find(p => p.id === socket.id);
+        if (player && player.isAlive) io.to(room).emit('newMessage', { sender: player.name, text });
+    });
+
+    socket.on('disconnect', () => { /* تنظيف الغرف */ });
+});
+
+function startGame(room) {
+    const rd = rooms[room];
+    let roles = ["مافيا 👤", "طبيب 🧑‍⚕️", "شرطة 👮", "مواطن 👤"].sort(() => Math.random() - 0.5);
+    rd.players.forEach((p, i) => {
+        p.role = roles[i];
+        io.to(p.id).emit('assignRole', p.role);
+    });
+    startPhase(room, "night", 60);
+}
+
+function startPhase(room, phase, duration) {
+    const rd = rooms[room];
+    rd.phase = phase;
+    rd.votes = {};
+    rd.nightActions = { killed: null, saved: null };
+    
+    const alivePlayers = rd.players.filter(p => p.isAlive);
+    const msg = phase === "night" ? "حل الليل، أغمضوا أعينكم. المافيا تختار ضحيتها الآن." : "طلع النهار، استيقظوا جميعاً للنقاش والتصويت.";
+    
+    io.to(room).emit('phaseChange', { phase, alivePlayers, msg });
+
+    setTimeout(() => {
+        if (phase === "night") endNight(room);
+        else endDay(room);
+    }, duration * 1000);
+}
+
+function endDay(room) {
+    const rd = rooms[room];
+    let victimId = Object.keys(rd.votes).reduce((a, b) => rd.votes[a] > rd.votes[b] ? a : b, null);
+    if (victimId) {
+        const victim = rd.players.find(p => p.id === victimId);
+        victim.isAlive = false;
+        io.to(room).emit('newMessage', { sender: "النظام", text: تم إعدام ${victim.name} بناءً على تصويت الجماعة. });
+        io.to(victimId).emit('statusUpdate', 'dead');
+    }
+    startPhase(room, "night", 60);
+}
+
+function endNight(room) {
+    const rd = rooms[room];
+    if (rd.nightActions.killed && rd.nightActions.killed !== rd.nightActions.saved) {
+        const victim = rd.players.find(p => p.id === rd.nightActions.killed);
+        victim.isAlive = false;
+        io.to(victim.id).emit('statusUpdate', 'dead');
+        io.to(room).emit('newMessage', { sender: "النظام", text: للأسف، استيقظنا على خبر مقتل ${victim.name}. });
+    } else {
+        io.to(room).emit('newMessage', { sender: "النظام", text: "مرت الليلة بسلام ولم يمت أحد." });
+    }
+    startPhase(room, "day", 180);
+}
+
+server.listen(process.env.PORT || 3000);
