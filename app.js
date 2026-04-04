@@ -11,41 +11,38 @@ app.use(express.static(__dirname));
 
 let players = []; 
 let gameStarted = false;
-let currentPhase = "waiting"; // waiting, night, day
+let currentPhase = "waiting"; 
 let timer = null;
 let timeLeft = 0;
-
-// متغيرات لتخزين قرارات الليل
 let nightActions = { killed: null, saved: null };
 
 io.on('connection', (socket) => {
     socket.on('playerJoined', (data) => {
-        if (gameStarted) return socket.emit('errorMsg', "اللعبة بدأت!");
+        if (gameStarted) return socket.emit('errorMsg', "اللعبة بدأت بالفعل!");
         players.push({ id: socket.id, name: data.name, role: null, isAlive: true });
-        io.emit('phaseChange', { msg: `انضم ${data.name}. العدد: ${players.length}` });
+        io.emit('phaseChange', { msg: `انضم ${data.name}. العدد الحالي: ${players.length}` });
         
-        // بدء اللعبة يدوياً أو عند وصول عدد معين (مثلاً 4)
+        // تبدأ اللعبة تلقائياً عند وصول 4 لاعبين (يمكنك تغيير الرقم)
         if (players.length === 4 && !gameStarted) {
             startGame();
         }
     });
 
-    // --- نظام الدردشة ---
     socket.on('sendMessage', (data) => {
-        // في الليل، المافيا فقط من يمكنهم الدردشة مع بعضهم (إذا كان هناك أكثر من 1)
         const player = players.find(p => p.id === socket.id);
+        if (!player || !player.isAlive) return;
+
         if (currentPhase === "night") {
-            if (player && player.role === "مافيا 👤") {
+            if (player.role === "مافيا 👤") {
                 players.filter(p => p.role === "مافيا 👤").forEach(m => {
                     io.to(m.id).emit('newMessage', { sender: `[همس المافيا] ${player.name}`, text: data.text });
                 });
             }
         } else {
-            io.emit('newMessage', { sender: data.sender, text: data.text });
+            io.emit('newMessage', { sender: player.name, text: data.text });
         }
     });
 
-    // --- قرارات الليل ---
     socket.on('nightAction', (data) => {
         const actor = players.find(p => p.id === socket.id);
         if (currentPhase !== "night" || !actor || !actor.isAlive) return;
@@ -58,6 +55,13 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('submitVote', (data) => {
+        if (currentPhase === "day") {
+            const target = players.find(p => p.id === data.target);
+            io.emit('newMessage', { sender: "النظام", text: `تم التصويت ضد ${target.name}` });
+        }
+    });
+
     socket.on('disconnect', () => {
         players = players.filter(p => p.id !== socket.id);
     });
@@ -66,13 +70,12 @@ io.on('connection', (socket) => {
 function startGame() {
     gameStarted = true;
     distributeRoles();
-    startPhase("night", 60); // الليل دقيقة واحدة كما طلبت
+    startPhase("night", 60); // الليل دقيقة
 }
 
 function distributeRoles() {
     let roles = [];
     const mafiaCount = players.length >= 5 ? 2 : 1;
-    
     for (let i = 0; i < mafiaCount; i++) roles.push("مافيا 👤");
     roles.push("طبيب 🧑‍⚕️");
     roles.push("شرطة 👮");
@@ -90,9 +93,11 @@ function startPhase(phase, duration) {
     timeLeft = duration;
     nightActions = { killed: null, saved: null };
 
+    const alivePlayers = players.filter(p => p.isAlive).map(p => ({ id: p.id, name: p.name }));
     io.emit('phaseChange', { 
         phase: phase, 
-        msg: phase === "night" ? "حل الليل.. المافيا تختار ضحيتها" : "طلع النهار.. حان وقت النقاش والتصويت" 
+        msg: phase === "night" ? "حل الليل.. المافيا تختار ضحيتها" : "طلع النهار.. حان وقت النقاش والتصويت",
+        alivePlayers: alivePlayers
     });
 
     if (timer) clearInterval(timer);
@@ -102,13 +107,13 @@ function startPhase(phase, duration) {
         if (timeLeft <= 0) {
             clearInterval(timer);
             if (phase === "night") endNight();
-            else startPhase("night", 60); // الانتقال لليل تلقائياً بعد النهار
+            else startPhase("night", 60);
         }
     }, 1000);
 }
 
 function endNight() {
-    let resultMsg = "مرت الليلة بهدوء..";
+    let resultMsg = "مرت الليلة بسلام..";
     if (nightActions.killed && nightActions.killed !== nightActions.saved) {
         const victim = players.find(p => p.id === nightActions.killed);
         if (victim) {
@@ -118,8 +123,8 @@ function endNight() {
         }
     }
     io.emit('newMessage', { sender: "النظام", text: resultMsg });
-    startPhase("day", 360); // النهار 6 دقائق (360 ثانية)
+    startPhase("day", 360); // النهار 6 دقائق
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`سيرفر المافيا يعمل على ${PORT}`));
