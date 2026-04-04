@@ -2,86 +2,106 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>مافيا Oasis - النسخة الاحترافية</title>
+    <title>MAFIA LAKHDAR | الإصدار الاحترافي</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        #chatBox { width: 100%; max-width: 400px; height: 300px; background: #1e293b; overflow-y: auto; padding: 10px; border: 2px solid #334155; border-radius: 10px; margin-bottom: 10px; }
-        .action-btn { background: #e94560; color: white; border: none; padding: 8px 15px; margin: 5px; border-radius: 5px; cursor: pointer; font-size: 0.9em; }
-        .action-btn:hover { background: #ff2e63; }
-        input { padding: 10px; border-radius: 5px; border: none; width: 80%; margin-bottom: 10px; }
-        #player-list { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-        .player-card { background: #334155; padding: 10px; border-radius: 8px; text-align: center; min-width: 80px; }
+        body { background: #0f172a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .game-logo { font-size: 2.5rem; font-weight: 900; letter-spacing: 3px; background: linear-gradient(to bottom, #ff2e63, #881111); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px #e94560); margin-bottom: 20px; animation: glow 2s infinite alternate; }
+        @keyframes glow { from { filter: drop-shadow(0 0 5px #e94560); } to { filter: drop-shadow(0 0 15px #ff2e63); } }
+        #chatBox { width: 100%; max-width: 400px; height: 300px; background: #1e293b; overflow-y: auto; padding: 15px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 10px; }
+        .player-card { background: #334155; padding: 10px; border-radius: 8px; margin: 5px; text-align: center; border-left: 4px solid #e94560; }
+        .action-btn { background: #e94560; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        input { background: #1e293b; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; width: 280px; margin-bottom: 10px; }
+        button#join-btn { background: #22c55e; color: white; border: none; padding: 10px 40px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="login-screen">
-        <h1>🎙️ مافيا Oasis</h1>
-        <input type="text" id="playerName" placeholder="اسمك المستعار">
+        <div class="game-logo">MAFIA LAKHDAR</div>
+        <input type="text" id="playerName" placeholder="اسمك">
         <input type="text" id="roomName" placeholder="رقم الغرفة">
-        <input type="password" id="roomPass" placeholder="الرقم السري">
-        <button onclick="joinGame()" style="background: #22c55e; color: white; padding: 10px 30px;">دخول</button>
+        <input type="password" id="roomPass" placeholder="كلمة السر">
+        <center><button id="join-btn" onclick="joinGame()">دخول المعركة</button></center>
     </div>
 
-    <div id="game-screen" style="display:none; width: 100%; max-width: 500px;">
-        <div id="status" style="background: #334155; padding: 10px; border-radius: 5px; margin-bottom: 10px;">انتظار اللاعبين...</div>
-        <div id="role-display" style="font-size: 1.2em; font-weight: bold; color: #fbbf24; margin-bottom: 10px;">دورك: ؟</div>
-        
-        <div id="player-list"></div>
-        
+    <div id="game-screen" style="display:none; width: 100%; max-width: 450px;">
+        <div id="status" style="color:#fbbf24; padding:10px; text-align:center;">انتظار اللاعبين...</div>
+        <div id="role-display" style="text-align:center; font-size: 1.2rem; margin-bottom: 15px;"></div>
+        <div id="player-list" style="display: flex; flex-wrap: wrap; justify-content: center;"></div>
         <div id="chatBox"></div>
-        <div style="display: flex; gap: 5px;">
-            <input type="text" id="msgInput" placeholder="اكتب رسالة...">
-            <button onclick="sendChat()" style="height: 40px;">إرسال</button>
+        <div style="display:flex; gap:5px;">
+            <input type="text" id="msgInput" style="flex:1;" placeholder="اكتب رسالة...">
+            <button onclick="sendChat()" style="background:#e94560; color:white; border:none; border-radius:5px; width:60px;">إرسال</button>
         </div>
-        <button id="mic-btn" onclick="toggleMic()" style="margin-top: 20px; background: #22c55e; color: white; border: none; padding: 10px; width: 100%; border-radius: 5px;">🎤 الميكروفون: يعمل</button>
+        <button id="mic-btn" onclick="toggleMic()" style="width:100%; margin-top:15px; background:#22c55e; color:white; border:none; padding:12px; border-radius:8px; font-weight:bold;">🎤 الميكروفون: يعمل</button>
     </div>
 
     <script>
         const socket = io();
-        let myStream, myId, myRole, currentRoom, peers = {};
-        let micEnabled = true;
+        let myStream, currentRoom, myRole, peers = {}, micEnabled = true;
 
         async function joinGame() {
             const name = document.getElementById('playerName').value;
             const room = document.getElementById('roomName').value;
-            const password = document.getElementById('roomPass').value;
+            const pass = document.getElementById('roomPass').value;
             currentRoom = room;
-
             if (name && room) {
                 try {
                     myStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    socket.emit('joinRoom', { name, room, password });
+                    socket.emit('joinRoom', { name, room, password: pass });
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'block';
-                } catch (e) { alert("يجب السماح بالميكروفون للعب!"); }
+                    speak("مرحباً بك في مافيا لخدّر. استعد للقتال.");
+                } catch (e) { alert("الميكروفون مطلوب!"); }
             }
         }
 
-        // --- نظام الصوت (WebRTC) ---
-        socket.on('user-connected', userId => {
-            const peer = new SimplePeer({ initiator: true, trickle: false, stream: myStream });
-            peer.on('signal', signal => socket.emit('signal', { to: userId, signal }));
-            peer.on('stream', stream => playStream(stream));
-            peers[userId] = peer;
-        });
-
-        socket.on('signal', data => {
-            if (!peers[data.from]) {
-                const peer = new SimplePeer({ initiator: false, trickle: false, stream: myStream });
-                peer.on('signal', signal => socket.emit('signal', { to: data.from, signal }));
-                peer.on('stream', stream => playStream(stream));
-                peers[data.from] = peer;
+        socket.on('signal', d => {
+            if (!peers[d.from]) {
+                const p = new SimplePeer({ initiator: false, trickle: false, stream: myStream });
+                p.on('signal', s => socket.emit('signal', { to: d.from, signal: s }));
+                p.on('stream', s => { const a = new Audio(); a.srcObject = s; a.play(); });
+                peers[d.from] = p;
             }
-            peers[data.from].signal(data.signal);
+            peers[d.from].signal(d.signal);
         });
 
-        function playStream(stream) {
-            const audio = new Audio();
-            audio.srcObject = stream;
-            audio.play();
+        socket.on('user-connected', uid => {
+            const p = new SimplePeer({ initiator: true, trickle: false, stream: myStream });
+            p.on('signal', s => socket.emit('signal', { to: uid, signal: s }));
+            p.on('stream', s => { const a = new Audio(); a.srcObject = s; a.play(); });
+            peers[uid] = p;
+        });
+
+        socket.on('phaseChange', data => {
+            document.getElementById('status').innerText = data.msg;
+            const list = document.getElementById('player-list');
+            list.innerHTML = "";
+            const me = data.players.find(p => p.id === socket.id);
+            if (!me.isAlive) {
+                if (micEnabled) toggleMic();
+                document.getElementById('msgInput').disabled = true;
+                document.getElementById('status').innerText = "💀 لقد تم إقصاؤك.. شاهد بصمت.";
+                return;
+            }
+            data.players.forEach(p => {
+                if (p.id !== socket.id && p.isAlive) {
+                    const div = document.createElement('div');
+                    div.className = "player-card";
+                    div.innerHTML = `${p.name} <br> <button class="action-btn" onclick="act('${p.id}')">اختيار</button>`;
+                    list.appendChild(div);
+                }
+            });
+        });
+
+        function act(tid) {
+            const isNight = document.getElementById('status').innerText.includes("الليل");
+            let type = isNight ? (myRole.includes("مافيا") ? "kill" : (myRole.includes("طبيب") ? "save" : "check")) : "vote";
+            if (isNight) socket.emit('nightAction', { room: currentRoom, targetId: tid, type });
+            else socket.emit('submitVote', { room: currentRoom, targetId: tid });
+            document.getElementById('player-list').innerHTML = "<p>تم تنفيذ قرارك.</p>";
         }
 
         function toggleMic() {
@@ -92,93 +112,25 @@
             btn.style.background = micEnabled ? "#22c55e" : "#ef4444";
         }
 
-        // --- نظام الأدوار والأزرار ---
-        socket.on('assignRole', role => {
-            myRole = role;
-            document.getElementById('role-display').innerText = "دورك هو: " + role;
-        });
-
-        socket.on('updatePlayers', players => {
-            const list = document.getElementById('player-list');
-            list.innerHTML = "";
-            players.forEach(p => {
-                if (p.id !== socket.id && p.isAlive) {
-                    const card = document.createElement('div');
-                    card.className = "player-card";
-                    card.innerHTML = `<span>${p.name}</span><br>`;
-                    
-                    // إظهار الأزرار بناءً على الدور والطور
-                    const btn = document.createElement('button');
-                    btn.className = "action-btn";
-                    btn.innerText = "اختيار";
-                    btn.onclick = () => handleAction(p.id);
-                    btn.id = "btn-" + p.id;
-                    btn.style.display = "none"; // مخفي افتراضياً
-                    
-                    card.appendChild(btn);
-                    list.appendChild(card);
-                }
-            });
-        });
-
-        socket.on('phaseChange', data => {
-            document.getElementById('status').innerText = data.msg;
-            const btns = document.querySelectorAll('.action-btn');
-            
-            btns.forEach(btn => {
-                const targetId = btn.id.replace('btn-', '');
-                btn.style.display = "none"; // إخفاء الكل أولاً
-
-                if (data.phase === "night") {
-                    if (myRole.includes("مافيا")) { btn.innerText = "قتل"; btn.style.display = "block"; }
-                    if (myRole.includes("طبيب")) { btn.innerText = "حماية"; btn.style.display = "block"; }
-                    if (myRole.includes("شرطة")) { btn.innerText = "تحقيق"; btn.style.display = "block"; }
-                } else if (data.phase === "day") {
-                    btn.innerText = "تصويت لإعدام";
-                    btn.style.display = "block";
-                }
-            });
-        });
-
-        function handleAction(targetId) {
-            const phase = document.getElementById('status').innerText.includes("الليل") ? "night" : "day";
-            if (phase === "night") {
-                let type = "";
-                if (myRole.includes("مافيا")) type = "kill";
-                if (myRole.includes("طبيب")) type = "save";
-                if (myRole.includes("شرطة")) type = "check";
-                socket.emit('nightAction', { room: currentRoom, targetId, type });
-            } else {
-                socket.emit('submitVote', { room: currentRoom, targetId });
-            }
-            // إخفاء الأزرار بعد الضغط لمرة واحدة
-            document.querySelectorAll('.action-btn').forEach(b => b.style.display = "none");
-        }
-
-        // --- الدردشة وصوت النظام ---
-        function sendChat() {
-            const text = document.getElementById('msgInput').value;
-            if (text) {
-                socket.emit('sendMessage', { room: currentRoom, text });
-                document.getElementById('msgInput').value = "";
-            }
-        }
-
+        socket.on('assignRole', r => { myRole = r; document.getElementById('role-display').innerText = "دورك: " + r; });
         socket.on('newMessage', d => {
             const div = document.createElement('div');
-            div.innerHTML = `<b style="color:#fbbf24">${d.sender}:</b> ${d.text}`;
+            div.innerHTML = `<b>${d.sender}:</b> ${d.text}`;
             const box = document.getElementById('chatBox');
             box.appendChild(div);
             box.scrollTop = box.scrollHeight;
             if (d.sender === "النظام") speak(d.text);
         });
 
-        function speak(text) {
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'ar-SA';
-            msg.pitch = 0.4;
-            msg.rate = 0.8;
-            window.speechSynthesis.speak(msg);
+        function sendChat() {
+            const inp = document.getElementById('msgInput');
+            if (inp.value) { socket.emit('sendMessage', { room: currentRoom, text: inp.value }); inp.value = ""; }
+        }
+
+        function speak(t) {
+            const m = new SpeechSynthesisUtterance(t);
+            m.lang = 'ar-SA'; m.pitch = 0.5; m.rate = 0.85;
+            window.speechSynthesis.speak(m);
         }
     </script>
 </body>
