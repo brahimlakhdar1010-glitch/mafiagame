@@ -24,7 +24,7 @@ io.on('connection', (socket) => {
         rd.players.push({ id: socket.id, name, isAlive: true, role: null });
         io.to(room).emit('updatePlayers', rd.players);
 
-        if (rd.players.length >= 4 && !rd.timerStarted) startWaitingTimer(room);
+        if (rd.players.length >= 2 && !rd.timerStarted) startWaitingTimer(room);
     });
 
     socket.on('nightAction', ({ room, targetId, type }) => {
