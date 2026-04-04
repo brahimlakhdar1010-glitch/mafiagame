@@ -3,142 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مافيا أونلاين - النسخة الاحترافية</title>
+    <title>لعبة المافيا العربية</title>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: white; text-align: center; margin: 0; padding: 20px; transition: 1s; }
-        .night-mode { background: #000 !important; }
-        .box { background: #16213e; padding: 20px; border-radius: 15px; max-width: 500px; margin: auto; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
-        
-        /* تصميم العداد التنازلي */
-        #timerBox { 
-            font-size: 2.5em; font-weight: bold; color: #e94560; 
-            background: #0f3460; padding: 10px 25px; border-radius: 50px; 
-            display: inline-block; margin-bottom: 15px; border: 3px solid #e94560;
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #e94560;
+            --text: #f8fafc;
         }
 
-        #chatBox { height: 200px; background: rgba(0,0,0,0.3); overflow-y: scroll; margin: 15px 0; padding: 10px; text-align: right; border-radius: 8px; border: 1px solid #333; }
-        input { width: 85%; padding: 12px; margin: 10px; border-radius: 8px; border: none; font-size: 16px; }
-        button { padding: 12px 20px; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; margin: 5px; }
-        .btn-main { background: #e94560; color: white; }
-        #phaseIndicator { background: #f1c40f; color: #000; padding: 10px; border-radius: 8px; font-weight: bold; }
-        .action-btn { background: #3498db; color: white; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* واجهة الدخول */
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        input {
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            margin: 10px;
+            width: 250px;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* واجهة اللعبة */
+        #game-screen {
+            display: none;
+            width: 100%;
+            max-width: 500px;
+            height: 100%;
+            flex-direction: column;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
+        #timerBox {
+            font-size: 2rem;
+            text-align: center;
+            padding: 10px;
+            background: var(--card-bg);
+            border-radius: 50px;
+            border: 2px solid var(--accent);
+            margin-bottom: 10px;
+        }
+
+        #status-bar {
+            background: #fbbf24;
+            color: #000;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        #userRole {
+            text-align: center;
+            font-size: 1.2rem;
+            margin: 10px 0;
+            color: #60a5fa;
+        }
+
+        #chatBox {
+            flex-grow: 1;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border: 1px solid #334155;
+        }
+
+        .msg { margin-bottom: 8px; font-size: 0.9rem; }
+        .msg b { color: var(--accent); }
+
+        .controls {
+            display: flex;
+            gap: 5px;
+        }
+
+        #action-pannel {
+            display: none;
+            background: var(--card-bg);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .player-btn {
+            display: block;
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            background: #334155;
+            color: white;
+            border: 1px solid #475569;
+            border-radius: 5px;
+            text-align: right;
+        }
+
+        .dead { filter: grayscale(1) opacity(0.5); pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div class="box">
-    <div id="setup">
-        <h2 style="color: #e94560;">🚪 دخول الغرفة</h2>
-        <input type="text" id="nameIn" placeholder="اسمك">
-        <input type="text" id="roomIn" placeholder="اسم الغرفة">
-        <input type="password" id="passIn" placeholder="كلمة السر">
-        <button class="btn-main" onclick="joinGame()">دخول / إنشاء</button>
+    <div id="login-screen">
+        <h1>👤 لعبة المافيا</h1>
+        <input type="text" id="playerName" placeholder="أدخل اسمك هنا...">
+        <button onclick="joinGame()">دخول اللعبة</button>
     </div>
 
-    <div id="gameArea" style="display:none;">
-        <div id="timerBox">07:00</div>
-        <div id="phaseIndicator">في انتظار اكتمال العدد (4 لاعبين)...</div>
-        <div id="roleDisplay" style="font-size:1.4em; margin:15px; color:#f1c40f;"></div>
-        
+    <div id="game-screen">
+        <div id="timerBox">00:00</div>
+        <div id="status-bar">في انتظار اللاعبين...</div>
+        <div id="userRole">دورك: جاري التحديد...</div>
+
+        <div id="action-pannel">
+            <p id="action-title" style="margin:0 0 5px 0; font-size:0.8rem; color: #94a3b8;"></p>
+            <div id="players-list"></div>
+        </div>
+
         <div id="chatBox"></div>
-        <input type="text" id="msgIn" placeholder="اكتب رسالة...">
-        <button class="btn-main" onclick="sendMsg()">إرسال</button>
 
-        <div id="playerButtons" style="margin-top: 20px;"></div>
+        <div class="controls">
+            <input type="text" id="chatInput" placeholder="اكتب رسالة..." style="flex-grow:1; margin:0;">
+            <button onclick="sendChat()">إرسال</button>
+        </div>
     </div>
-</div>
 
-<script>
-    const socket = io();
-    let myName, myRole, myPeer, myStream;
+    <script>
+        const socket = io();
+        let myName = "";
+        let myRole = "";
+        let isAlive = true;
 
-    function joinGame() {
-        myName = document.getElementById('nameIn').value;
-        let room = document.getElementById('roomIn').value;
-        let pass = document.getElementById('passIn').value;
-        if(!myName || !room || !pass) return alert("يرجى إكمال البيانات!");
+        function joinGame() {
+            myName = document.getElementById('playerName').value;
+            if (!myName) return alert("من فضلك أدخل اسمك");
+            
+            socket.emit('playerJoined', { name: myName });
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+        }
 
-        myPeer = new Peer();
-        myPeer.on('open', (id) => {
-            socket.emit('playerJoined', { name: myName, peerId: id, roomName: room, roomPass: pass });
+        // تحديث العداد
+        socket.on('timerUpdate', (seconds) => {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            const display = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            const tBox = document.getElementById('timerBox');
+            tBox.innerText = display;
+            tBox.style.color = (seconds <= 10) ? "#ff0000" : "#e94560";
         });
-        myPeer.on('call', (c) => { 
-            c.answer(myStream); 
-            const a = document.createElement('audio'); 
-            c.on('stream', (s) => { a.srcObject = s; a.play(); }); 
-        });
-    }
 
-    // تحديث العداد التنازلي من السيرفر
-    socket.on('timerUpdate', (seconds) => {
-        let m = Math.floor(seconds / 60);
-        let s = seconds % 60;
-        let display = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        const tBox = document.getElementById('timerBox');
-        tBox.innerText = display;
-        
-        // تغيير اللون للأحمر في آخر 10 ثوانٍ
-        tBox.style.color = (seconds <= 10) ? "#ff0000" : "#e94560";
-        tBox.style.borderColor = (seconds <= 10) ? "#ff0000" : "#e94560";
-    });
-
-    socket.on('assignRole', (role) => {
-        myRole = role;
-        document.getElementById('setup').style.display = "none";
-        document.getElementById('gameArea').style.display = "block";
-        document.getElementById('roleDisplay').innerText = "دورك: " + role;
-    });
-
-    socket.on('phaseChange', (data) => {
-        document.getElementById('phaseIndicator').innerText = data.msg;
-        if(data.phase === "night") document.body.classList.add('night-mode');
-        else document.body.classList.remove('night-mode');
-    });
-
-    socket.on('updatePlayerList', (players) => {
-        const area = document.getElementById('playerButtons');
-        area.innerHTML = "";
-        const isNight = document.body.classList.contains('night-mode');
-
-        players.forEach(p => {
-            if (p.name !== myName && p.alive) {
-                const b = document.createElement('button');
-                b.className = "action-btn";
-                if (isNight) {
-                    if (myRole.includes("مافيا")) {
-                        b.innerText = "🎯 قتل " + p.name;
-                        b.onclick = () => { socket.emit('mafiaKill', p.name); area.innerHTML="✅ تم الاختيار"; };
-                    } else if (myRole.includes("طبيب")) {
-                        b.innerText = "🛡️ حماية " + p.name;
-                        b.onclick = () => { socket.emit('doctorProtect', p.name); area.innerHTML="✅ تم تفعيل الدرع"; };
-                    } else if (myRole.includes("شرطة")) {
-                        b.innerText = "🔍 فحص " + p.name;
-                        b.onclick = () => { socket.emit('policeInvestigate', p.name); area.innerHTML="✅ تم طلب الفحص"; };
-                    } else return;
-                } else {
-                    b.innerText = "تصويت ضد " + p.name;
-                    b.onclick = () => { b.disabled = true; b.innerText = "✅ صوتّت"; };
-                }
-                area.appendChild(b);
+        // تغيير حالة اللعبة (ليل/نهار)
+        socket.on('phaseChange', (data) => {
+            document.getElementById('status-bar').innerText = data.msg;
+            
+            if (data.phase === "night" && isAlive) {
+                setupNightActions(data.phase);
+            } else {
+                document.getElementById('action-pannel').style.display = 'none';
             }
         });
-    });
 
-    socket.on('receiveMessage', (d) => {
-        const b = document.getElementById('chatBox');
-        b.innerHTML += `<p><b>${d.user}:</b> ${d.msg}</p>`;
-        b.scrollTop = b.scrollHeight;
-    });
+        // توزيع الأدوار
+        socket.on('assignRole', (role) => {
+            myRole = role;
+            document.getElementById('userRole').innerText = "دورك: " + role;
+        });
 
-    function sendMsg() {
-        const i = document.getElementById('msgIn');
-        if(i.value) socket.emit('newMessage', { user: myName, msg: i.value });
-        i.value = "";
-    }
+        // استقبال الدردشة
+        socket.on('newMessage', (data) => {
+            const chatBox = document.getElementById('chatBox');
+            const div = document.createElement('div');
+            div.className = "msg";
+            div.innerHTML = `<b>${data.sender}:</b> ${data.text}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
 
-    socket.on('errorMsg', (m) => alert(m));
-</script>
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            if (input.value && isAlive) {
+                socket.emit('sendMessage', { sender: myName, text: input.value });
+                input.value = "";
+            }
+        }
+
+        // تجهيز أزرار الليل (القتل/الحماية/الفحص)
+        function setupNightActions(phase) {
+            if (myRole.includes("مواطن")) return;
+
+            const panel = document.getElementById('action-pannel');
+            const list = document.getElementById('players-list');
+            const title = document.getElementById('action-title');
+            
+            panel.style.display = 'block';
+            list.innerHTML = ""; // مسح القائمة القديمة
+
+            if (myRole.includes("مافيا")) title.innerText = "اختر ضحية لقتلها:";
+            else if (myRole.includes("طبيب")) title.innerText = "اختر شخصاً لحمايته:";
+            else if (myRole.includes("شرطة")) title.innerText = "اختر شخصاً لكشف هويته:";
+
+            // ملاحظة: هنا نحتاج لإرسال قائمة اللاعبين من السيرفر، 
+            // للتبسيط سنفترض أن السيرفر يرسل قائمة اللاعبين الحية
+            // يمكنك طلب تحديث للسيرفر ليرسل قائمة الأسماء
+        }
+
+        function act(targetId) {
+            socket.emit('nightAction', { targetId: targetId });
+            document.getElementById('action-pannel').style.display = 'none';
+            alert("تم تسجيل قرارك!");
+        }
+
+        socket.on('statusUpdate', (status) => {
+            if (status === 'dead') {
+                isAlive = false;
+                document.getElementById('game-screen').classList.add('dead');
+                document.getElementById('status-bar').innerText = "لقد قتلت! يمكنك المشاهدة فقط.";
+            }
+        });
+
+    </script>
 </body>
 </html>
