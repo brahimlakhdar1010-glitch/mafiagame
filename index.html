@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA LAKHDAR | MOBILE</title>
+    <title>MAFIA LAKHDAR | FINAL</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <style>
@@ -12,12 +12,13 @@
         #timer-box { width: 70px; height: 70px; border: 3px solid #ff2e63; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; background: rgba(0,0,0,0.6); }
         #chatBox { width: 95vw; max-width: 450px; height: 250px; background: rgba(22, 27, 34, 0.8); border: 1px solid #30363d; border-radius: 15px; overflow-y: auto; padding: 10px; margin-bottom: 10px; }
         .p-card { background: rgba(33, 38, 45, 0.9); border-bottom: 3px solid #ff2e63; padding: 10px; border-radius: 10px; margin: 5px; text-align: center; flex: 1 1 40%; max-width: 150px; font-size: 0.85rem; }
+        .spec-tag { font-size: 0.7rem; color: #8b949e; }
         .btn-act { background: #ff2e63; color: white; border: none; padding: 8px; border-radius: 15px; cursor: pointer; font-weight: bold; margin-top: 5px; width: 100%; }
         input { background: #0d1117; border: 1px solid #30363d; color: white; padding: 12px; border-radius: 25px; width: 85vw; max-width: 300px; text-align: center; margin-bottom: 10px; }
         button#joinBtn { background: #238636; color: white; border: none; padding: 15px 50px; border-radius: 30px; font-weight: bold; cursor: pointer; width: 85vw; max-width: 300px; }
-        .guide-section { width: 90vw; max-width: 450px; background: rgba(13, 17, 23, 0.8); border: 1px solid #30363d; border-radius: 15px; padding: 15px; margin-top: 20px; text-align: right; }
-        .guide-section h2 { color: #ff2e63; font-size: 1.1rem; }
-        .guide-section p { font-size: 0.8rem; color: #adb5bd; }
+        .mic-active { background: #238636 !important; }
+        .mic-muted { background: #da3633 !important; }
+        .mic-disabled { background: #30363d !important; opacity: 0.5; }
     </style>
 </head>
 <body>
@@ -28,16 +29,12 @@
             <input type="text" id="rName" placeholder="رقم الغرفة"><br>
             <input type="password" id="rPass" placeholder="كلمة السر"><br>
             <button id="joinBtn" onclick="join()">ابدأ المهمة</button>
-            <div class="guide-section">
-                <h2>📖 القوانين باختصار</h2>
-                <p>• المافيا تتناقش وتقتل ليلاً بصوتها الخاص.<br>• الطبيب يحمي (بما في ذلك نفسه).<br>• الشرطة تحقق.<br>• النهار للجميع للنقاش الصوتي والتصويت.</p>
-            </div>
         </center>
     </div>
 
-    <div id="game-screen" style="display:none; width: 100%; display: flex; flex-direction: column; align-items: center;">
+    <div id="game-screen" style="display:none; width: 100%; flex-direction: column; align-items: center;">
         <div id="timer-box">--</div>
-        <div id="status" style="color:#f0e050; font-weight:bold; margin-bottom:10px; font-size: 0.9rem;"></div>
+        <div id="status" style="color:#f0e050; font-weight:bold; margin-bottom:10px; text-align:center;"></div>
         <div id="role" style="font-size:1.1rem; margin-bottom:10px; color:#ff2e63;"></div>
         <div id="player-list" style="display:flex; flex-wrap:wrap; justify-content:center; width: 100%;"></div>
         <div id="chatBox"></div>
@@ -45,12 +42,12 @@
             <input type="text" id="mInput" style="flex:1; margin-bottom:0;" placeholder="رسالة...">
             <button onclick="send()" style="background:#ff2e63; border:none; padding:10px 20px; border-radius:20px; color:white;">📩</button>
         </div>
-        <button id="micBtn" style="width:95vw; max-width:450px; margin-top:10px; background:#238636; color:white; border:none; padding:12px; border-radius:12px; font-weight:bold;">🎤 الميكروفون مفعّل</button>
+        <button id="micBtn" onclick="toggleMic()" class="mic-active" style="width:95vw; max-width:450px; margin-top:10px; color:white; border:none; padding:12px; border-radius:12px; font-weight:bold;">🎤 ميكروفون: يعمل</button>
     </div>
 
     <script>
         const socket = io();
-        let stream, room, myRole, peers = {}, micOn = true;
+        let stream, room, myRole, peers = {}, userMicEnabled = true, systemMicAllowed = true;
         const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         async function join() {
@@ -68,34 +65,48 @@
         }
 
         socket.on('audioControl', d => {
-            if (stream) {
-                stream.getAudioTracks()[0].enabled = d.enabled;
-                const btn = document.getElementById('micBtn');
-                btn.innerText = d.enabled ? "🎤 الميكروفون مفعّل" : "🔇 مكتوم (خصوصية ليلية)";
-                btn.style.background = d.enabled ? "#238636" : "#5a0000";
-            }
+            systemMicAllowed = d.allowedBySystem;
+            updateMicHardware();
         });
+
+        function toggleMic() {
+            if (!systemMicAllowed) return;
+            userMicEnabled = !userMicEnabled;
+            updateMicHardware();
+        }
+
+        function updateMicHardware() {
+            const btn = document.getElementById('micBtn');
+            const canWork = systemMicAllowed && userMicEnabled;
+            if (stream) stream.getAudioTracks()[0].enabled = canWork;
+            
+            if (!systemMicAllowed) { btn.innerText = "🔇 صوتك مكتوم الآن"; btn.className = "mic-disabled"; }
+            else if (!userMicEnabled) { btn.innerText = "🔇 ميكروفونك: مقفل"; btn.className = "mic-muted"; }
+            else { btn.innerText = "🎤 ميكروفونك: يعمل"; btn.className = "mic-active"; }
+        }
 
         socket.on('phaseChange', d => {
             document.getElementById('status').innerText = d.msg;
             const list = document.getElementById('player-list'); list.innerHTML = "";
             const isNight = d.phase === "night";
+            const me = d.players.find(p => p.id === socket.id);
             
             d.players.forEach(p => {
-                if (p.isAlive) {
-                    const div = document.createElement('div'); div.className = "p-card";
-                    div.innerHTML = `${p.name} ${p.id === socket.id ? "(أنت)" : ""}<br>`;
-                    
+                const div = document.createElement('div'); div.className = "p-card";
+                let tag = p.isSpectator ? '<span class="spec-tag">👁️ مشاهد</span>' : '';
+                div.innerHTML = `${tag} ${p.name} ${p.id === socket.id ? "(أنت)" : ""}<br>`;
+                
+                if (me && !me.isSpectator && me.isAlive) {
                     let canAct = false;
                     if (isNight) {
-                        if (myRole.includes("مافيا") && p.id !== socket.id) canAct = true;
-                        if (myRole.includes("طبيب")) canAct = true; // يمكنه اختيار نفسه
-                        if (myRole.includes("شرطة") && p.id !== socket.id) canAct = true;
-                    } else if (p.id !== socket.id) { canAct = true; }
-
+                        if (myRole.includes("مافيا") && p.id !== socket.id && !p.isSpectator) canAct = true;
+                        if (myRole.includes("طبيب") && !p.isSpectator) canAct = true;
+                        if (myRole.includes("شرطة") && p.id !== socket.id && !p.isSpectator) canAct = true;
+                    } else if (p.id !== socket.id && !p.isSpectator) { canAct = true; }
+                    
                     if (canAct) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}')">اختيار</button>`;
-                    list.appendChild(div);
                 }
+                list.appendChild(div);
             });
         });
 
@@ -104,8 +115,10 @@
             if (isNight) {
                 let type = myRole.includes("مافيا") ? "kill" : (myRole.includes("طبيب") ? "save" : (myRole.includes("شرطة") ? "check" : ""));
                 socket.emit('nightAction', { room, targetId: tid, type });
-            } else { socket.emit('submitVote', { room, targetId: tid }); }
-            document.getElementById('player-list').innerHTML = "<p>✅ تم التنفيذ</p>";
+                document.getElementById('player-list').innerHTML = "<p>✅ تم إرسال قرارك الليلي</p>";
+            } else {
+                socket.emit('submitVote', { room, targetId: tid });
+            }
         }
 
         socket.on('timerUpdate', t => { document.getElementById('timer-box').innerText = t; });
