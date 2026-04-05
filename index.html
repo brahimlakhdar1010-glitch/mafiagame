@@ -57,9 +57,13 @@
 
     <script>
         const socket = io();
-        let stream, room, myRole, peers = {}, userMicEnabled = true, systemMicAllowed = true;
+        let stream, room, myRole = "", peers = {}, userMicEnabled = true, systemMicAllowed = true;
         let nightActionUsed = false;
-        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+        // خوادم الاستقرار للاتصال عبر الإنترنت
+        const iceConfig = { iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ] };
 
         async function join() {
             const name = document.getElementById('pName').value;
@@ -96,19 +100,25 @@
         socket.on('phaseChange', d => {
             if(d.phase === "night") nightActionUsed = false;
             document.getElementById('status').innerText = (d.phase === "night" ? "🌙 " : "☀️ ") + d.msg;
-            Object.values(peers).forEach(p => p.destroy());
-            peers = {};
+            
+            // تنظيف القنوات القديمة بشكل كامل
+            Object.keys(peers).forEach(id => {
+                if(peers[id]) peers[id].destroy();
+                delete peers[id];
+            });
             document.getElementById('audios').innerHTML = "";
         });
 
         socket.on('signal', d => {
-            if (!peers[d.from]) {
+            if (peers[d.from]) {
+                peers[d.from].signal(d.signal);
+            } else {
                 const p = new SimplePeer({ initiator: false, trickle: false, stream: stream, config: iceConfig });
                 p.on('signal', s => socket.emit('signal', { to: d.from, signal: s }));
                 p.on('stream', st => createAudio(d.from, st));
                 peers[d.from] = p;
+                p.signal(d.signal);
             }
-            peers[d.from].signal(d.signal);
         });
 
         socket.on('user-connected', id => {
@@ -129,8 +139,8 @@
             }
             audio.srcObject = remoteStream;
             
+            // منطق الكتم البرمجي
             const isNight = document.getElementById('status').innerText.includes("🌙");
-            // التعديل الهام: كتم الصوت فقط إذا كنا في الليل وأنت لست مافيا. في النهار الكل يسمع الكل.
             if (isNight) {
                 audio.muted = !myRole.includes("مافيا");
             } else {
@@ -151,13 +161,12 @@
                     if (isNight) {
                         if (!nightActionUsed) {
                             if (myRole.includes("مافيا") && p.id !== socket.id) showBtn = true;
-                            if (myRole.includes("طبيب")) showBtn = true; // الطبيب يمكنه اختيار نفسه الآن
+                            if (myRole.includes("طبيب")) showBtn = true; 
                             if (myRole.includes("شرطة") && p.id !== socket.id) showBtn = true;
                         }
                     } else if (p.id !== socket.id) {
-                        showBtn = true; // تصويت النهار متاح دائماً للأحياء
+                        showBtn = true; 
                     }
-                    
                     if (showBtn) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">اختيار</button>`;
                 }
                 list.appendChild(div);
