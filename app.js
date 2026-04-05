@@ -30,18 +30,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('signal', (data) => {
-        const rd = Object.values(rooms).find(r => r.players.some(p => p.id === socket.id));
-        if (!rd) return;
-        const sender = rd.players.find(p => p.id === socket.id);
-        
-        if (rd.phase === "night") {
-            const receiver = rd.players.find(p => p.id === data.to);
-            if (sender.role?.includes("مافيا") && receiver?.role?.includes("مافيا")) {
-                io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
-            }
-        } else {
-            io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
-        }
+        io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
     });
 
     socket.on('submitVote', ({ room, targetId }) => {
@@ -143,14 +132,13 @@ function startPhase(room, phase) {
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
 
-    // إرسال أمر الاتصال لجميع اللاعبين الأحياء بعد ثانية واحدة لضمان استقرار المرحلة
     setTimeout(() => {
         rd.players.forEach(p => {
             if (p.isAlive && !p.isSpectator) {
                 io.to(room).emit('user-connected', p.id);
             }
         });
-    }, 1000);
+    }, 1500);
 
     io.to(room).emit('updatePlayers', rd.players);
 
