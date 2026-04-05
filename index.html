@@ -59,8 +59,12 @@
         const socket = io();
         let stream, room, myRole = "", peers = {}, userMicEnabled = true, systemMicAllowed = true;
         let nightActionUsed = false;
-        
-        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+        let audioContext;
+
+        const iceConfig = { iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ] };
 
         async function join() {
             const name = document.getElementById('pName').value;
@@ -69,9 +73,8 @@
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     
-                    // حل مشكلة الهاتف: تشغيل السياق الصوتي بعد أول لمسة
-                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    if (audioCtx.state === 'suspended') await audioCtx.resume();
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioContext.state === 'suspended') await audioContext.resume();
 
                     socket.emit('joinRoom', { name, room, password: document.getElementById('rPass').value });
                     document.getElementById('login-screen').style.display = 'none';
@@ -97,12 +100,19 @@
             if (!systemMicAllowed) return;
             userMicEnabled = !userMicEnabled;
             updateMicHardware();
+            
+            // سطر سحري للهواتف: عند لمس زر الميكروفون، نجبر أي صوت قادم على العمل
+            document.querySelectorAll('audio').forEach(a => a.play().catch(e => {}));
         }
 
         socket.on('phaseChange', d => {
             if(d.phase === "night") nightActionUsed = false;
             document.getElementById('status').innerText = (d.phase === "night" ? "🌙 " : "☀️ ") + d.msg;
-            Object.keys(peers).forEach(id => { peers[id].destroy(); delete peers[id]; });
+            
+            Object.keys(peers).forEach(id => {
+                if (peers[id]) peers[id].destroy();
+                delete peers[id];
+            });
             document.getElementById('audios').innerHTML = "";
         });
 
@@ -132,20 +142,17 @@
                 audio = document.createElement('audio');
                 audio.id = "audio-" + id;
                 audio.autoplay = true;
-                audio.playsInline = true;
+                audio.setAttribute('playsinline', ''); // للهاتف
+                audio.setAttribute('webkit-playsinline', ''); // للآيفون
                 document.getElementById('audios').appendChild(audio);
             }
             audio.srcObject = remoteStream;
             
-            // كتم الصوت في الليل لغير المافيا
             const isNight = document.getElementById('status').innerText.includes("🌙");
-            audio.muted = isNight && !myRole.includes("مافيا");
+            audio.muted = (isNight && !myRole.includes("مافيا"));
             
-            // محاولة التشغيل القسري للهاتف
-            audio.play().catch(() => {
-                console.log("الانتظار لتفاعل المستخدم...");
-                window.addEventListener('click', () => audio.play(), { once: true });
-            });
+            // محاولة التشغيل، وإذا فشل الهاتف، سينتظر أول لمسة (Click) على الشاشة
+            audio.play().catch(e => console.log("الهاتف يحظر التشغيل التلقائي"));
         }
 
         socket.on('updatePlayers', players => {
@@ -161,7 +168,7 @@
                     if (isNight) {
                         if (!nightActionUsed) {
                             if (myRole.includes("مافيا") && p.id !== socket.id) showBtn = true;
-                            if (myRole.includes("طبيب")) showBtn = true; // الطبيب يحمي أي شخص
+                            if (myRole.includes("طبيب")) showBtn = true; 
                             if (myRole.includes("شرطة") && p.id !== socket.id) showBtn = true;
                         }
                     } else if (p.id !== socket.id) {
