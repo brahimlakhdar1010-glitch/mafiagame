@@ -3,69 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA LAKHDAR | MOBILE OPTIMIZED</title>
+    <title>MAFIA LAKHDAR | MOBILE</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <style>
-        body { 
-            background: radial-gradient(circle at center, #1a1c2c 0%, #070b14 100%);
-            color: #e2e8f0; font-family: 'Segoe UI', sans-serif;
-            display: flex; flex-direction: column; align-items: center; 
-            min-height: 100vh; margin: 0; padding: 10px;
-            overflow-x: hidden;
-        }
+        body { background: radial-gradient(circle at center, #1a1c2c 0%, #070b14 100%); color: #e2e8f0; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 10px; overflow-x: hidden; }
         .logo { font-size: 2.2rem; font-weight: 900; background: linear-gradient(to bottom, #ff2e63, #5a0000); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px #ff2e63); margin: 15px 0; }
-        
-        #timer-box {
-            width: 70px; height: 70px; border: 3px solid #ff2e63;
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            font-size: 1.5rem; font-weight: bold; margin-bottom: 15px;
-            background: rgba(0,0,0,0.6);
-        }
-
-        #chatBox { 
-            width: 95vw; max-width: 450px; height: 300px; 
-            background: rgba(22, 27, 34, 0.8); border: 1px solid #30363d; 
-            border-radius: 15px; overflow-y: auto; padding: 10px; margin-bottom: 10px; 
-        }
-
-        .p-card { 
-            background: rgba(33, 38, 45, 0.9); border-bottom: 3px solid #ff2e63; 
-            padding: 10px; border-radius: 10px; margin: 5px; text-align: center; 
-            flex: 1 1 40%; max-width: 150px; font-size: 0.9rem;
-        }
-
-        .btn-act { 
-            background: #ff2e63; color: white; border: none; 
-            padding: 10px 15px; border-radius: 20px; cursor: pointer; 
-            font-weight: bold; margin-top: 5px; width: 100%;
-        }
-
-        input { 
-            background: #0d1117; border: 1px solid #30363d; color: white; 
-            padding: 12px; border-radius: 25px; width: 85vw; 
-            max-width: 300px; text-align: center; margin-bottom: 10px; font-size: 1rem;
-        }
-
-        button#joinBtn { 
-            background: #238636; color: white; border: none; 
-            padding: 15px 50px; border-radius: 30px; font-weight: bold; 
-            cursor: pointer; font-size: 1.2rem; width: 85vw; max-width: 300px;
-        }
-
-        /* تنسيق قسم الدليل الجديد */
-        .guide-section {
-            width: 90vw; max-width: 450px; background: rgba(13, 17, 23, 0.8);
-            border: 1px border-style: solid border-color: #30363d; border-radius: 15px;
-            padding: 20px; margin-top: 30px; text-align: right;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        }
-        .guide-section h2 { color: #ff2e63; font-size: 1.3rem; margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 5px; }
-        .guide-section h3 { color: #f0e050; font-size: 1rem; margin-top: 15px; }
-        .guide-section p, .guide-section li { font-size: 0.85rem; color: #adb5bd; line-height: 1.5; }
-        .guide-section ul { padding-right: 20px; margin: 5px 0; }
-
-        .input-group { display: flex; gap: 5px; width: 95vw; max-width: 450px; align-items: center; }
+        #timer-box { width: 70px; height: 70px; border: 3px solid #ff2e63; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; background: rgba(0,0,0,0.6); }
+        #chatBox { width: 95vw; max-width: 450px; height: 250px; background: rgba(22, 27, 34, 0.8); border: 1px solid #30363d; border-radius: 15px; overflow-y: auto; padding: 10px; margin-bottom: 10px; }
+        .p-card { background: rgba(33, 38, 45, 0.9); border-bottom: 3px solid #ff2e63; padding: 10px; border-radius: 10px; margin: 5px; text-align: center; flex: 1 1 40%; max-width: 150px; font-size: 0.85rem; }
+        .btn-act { background: #ff2e63; color: white; border: none; padding: 8px; border-radius: 15px; cursor: pointer; font-weight: bold; margin-top: 5px; width: 100%; }
+        input { background: #0d1117; border: 1px solid #30363d; color: white; padding: 12px; border-radius: 25px; width: 85vw; max-width: 300px; text-align: center; margin-bottom: 10px; }
+        button#joinBtn { background: #238636; color: white; border: none; padding: 15px 50px; border-radius: 30px; font-weight: bold; cursor: pointer; width: 85vw; max-width: 300px; }
+        .guide-section { width: 90vw; max-width: 450px; background: rgba(13, 17, 23, 0.8); border: 1px solid #30363d; border-radius: 15px; padding: 15px; margin-top: 20px; text-align: right; }
+        .guide-section h2 { color: #ff2e63; font-size: 1.1rem; }
+        .guide-section p { font-size: 0.8rem; color: #adb5bd; }
     </style>
 </head>
 <body>
@@ -76,44 +28,30 @@
             <input type="text" id="rName" placeholder="رقم الغرفة"><br>
             <input type="password" id="rPass" placeholder="كلمة السر"><br>
             <button id="joinBtn" onclick="join()">ابدأ المهمة</button>
-
             <div class="guide-section">
-                <h2>📖 دليل اللعبة والقوانين</h2>
-                
-                <h3>🔹 كيف تنضم؟</h3>
-                <p>أدخل اسمك ورقم الغرفة وكلمة السر الموحدة مع أصدقائك. تأكد من تفعيل "الميكروفون" عند الطلب للتواصل الصوتي.</p>
-
-                <h3>🎭 الأدوار الأساسية:</h3>
-                <ul>
-                    <li><b>المافيا 👤:</b> القضاء على المواطنين ليلاً دون كشف الهوية.</li>
-                    <li><b>الطبيب 🧑‍⚕️:</b> حماية لاعب واحد كل ليلة من القتل.</li>
-                    <li><b>الشرطة 👮:</b> التحقيق في هوية لاعب واحد كل ليلة.</li>
-                    <li><b>المواطن 👤:</b> كشف المافيا بالتصويت في النهار.</li>
-                </ul>
-
-                <h3>⏳ مراحل اللعبة:</h3>
-                <p>اللعبة تنتقل بين <b>الليل</b> (تنفيذ الأدوار السرية) و <b>النهار</b> (النقاش والتصويت العلني لإعدام المشتبه بهم).</p>
+                <h2>📖 القوانين باختصار</h2>
+                <p>• المافيا تتناقش وتقتل ليلاً بصوتها الخاص.<br>• الطبيب يحمي (بما في ذلك نفسه).<br>• الشرطة تحقق.<br>• النهار للجميع للنقاش الصوتي والتصويت.</p>
             </div>
         </center>
     </div>
 
     <div id="game-screen" style="display:none; width: 100%; display: flex; flex-direction: column; align-items: center;">
         <div id="timer-box">--</div>
-        <div id="status" style="color:#f0e050; text-align:center; font-weight:bold; margin-bottom:10px; font-size: 0.9rem;"></div>
-        <div id="role" style="text-align:center; font-size:1.2rem; margin-bottom:10px; color:#ff2e63;"></div>
-        <div id="player-list" style="display:flex; flex-wrap:wrap; justify-content:center; width: 100%; margin-bottom:10px;"></div>
+        <div id="status" style="color:#f0e050; font-weight:bold; margin-bottom:10px; font-size: 0.9rem;"></div>
+        <div id="role" style="font-size:1.1rem; margin-bottom:10px; color:#ff2e63;"></div>
+        <div id="player-list" style="display:flex; flex-wrap:wrap; justify-content:center; width: 100%;"></div>
         <div id="chatBox"></div>
-        <div class="input-group">
-            <input type="text" id="mInput" style="flex:1; margin-bottom:0;" placeholder="اكتب هنا...">
-            <button onclick="send()" style="background:#ff2e63; border:none; padding:12px 20px; border-radius:20px; color:white;">📩</button>
+        <div style="display:flex; gap:5px; width:95vw; max-width:450px;">
+            <input type="text" id="mInput" style="flex:1; margin-bottom:0;" placeholder="رسالة...">
+            <button onclick="send()" style="background:#ff2e63; border:none; padding:10px 20px; border-radius:20px; color:white;">📩</button>
         </div>
-        <button id="micBtn" onclick="toggleMic()" style="width:95vw; max-width:450px; margin-top:15px; background:#238636; color:white; border:none; padding:15px; border-radius:12px; font-weight:bold;">🎤 الميكروفون: مفعّل</button>
+        <button id="micBtn" style="width:95vw; max-width:450px; margin-top:10px; background:#238636; color:white; border:none; padding:12px; border-radius:12px; font-weight:bold;">🎤 الميكروفون مفعّل</button>
     </div>
 
     <script>
         const socket = io();
         let stream, room, myRole, peers = {}, micOn = true;
-        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         async function join() {
             const name = document.getElementById('pName').value;
@@ -122,17 +60,64 @@
             if (name && room) {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    if (audioCtx.state === 'suspended') audioCtx.resume();
                     socket.emit('joinRoom', { name, room, password: pass });
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'flex';
-                    speak("تم التحديث للهاتف. استمتع!");
                 } catch(e) { alert("الميكروفون مطلوب!"); }
             }
         }
 
+        socket.on('audioControl', d => {
+            if (stream) {
+                stream.getAudioTracks()[0].enabled = d.enabled;
+                const btn = document.getElementById('micBtn');
+                btn.innerText = d.enabled ? "🎤 الميكروفون مفعّل" : "🔇 مكتوم (خصوصية ليلية)";
+                btn.style.background = d.enabled ? "#238636" : "#5a0000";
+            }
+        });
+
+        socket.on('phaseChange', d => {
+            document.getElementById('status').innerText = d.msg;
+            const list = document.getElementById('player-list'); list.innerHTML = "";
+            const isNight = d.phase === "night";
+            
+            d.players.forEach(p => {
+                if (p.isAlive) {
+                    const div = document.createElement('div'); div.className = "p-card";
+                    div.innerHTML = `${p.name} ${p.id === socket.id ? "(أنت)" : ""}<br>`;
+                    
+                    let canAct = false;
+                    if (isNight) {
+                        if (myRole.includes("مافيا") && p.id !== socket.id) canAct = true;
+                        if (myRole.includes("طبيب")) canAct = true; // يمكنه اختيار نفسه
+                        if (myRole.includes("شرطة") && p.id !== socket.id) canAct = true;
+                    } else if (p.id !== socket.id) { canAct = true; }
+
+                    if (canAct) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}')">اختيار</button>`;
+                    list.appendChild(div);
+                }
+            });
+        });
+
+        function act(tid) {
+            const isNight = document.getElementById('status').innerText.includes("الليل");
+            if (isNight) {
+                let type = myRole.includes("مافيا") ? "kill" : (myRole.includes("طبيب") ? "save" : (myRole.includes("شرطة") ? "check" : ""));
+                socket.emit('nightAction', { room, targetId: tid, type });
+            } else { socket.emit('submitVote', { room, targetId: tid }); }
+            document.getElementById('player-list').innerHTML = "<p>✅ تم التنفيذ</p>";
+        }
+
         socket.on('timerUpdate', t => { document.getElementById('timer-box').innerText = t; });
+        socket.on('assignRole', r => { myRole = r; document.getElementById('role').innerText = "دورك: " + r; });
+        socket.on('newMessage', d => {
+            const div = document.createElement('div');
+            div.innerHTML = `<b style="color:#ff2e63">${d.sender}:</b> ${d.text}`;
+            const box = document.getElementById('chatBox'); box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+            if (d.sender === "النظام") speak(d.text);
+        });
+
         socket.on('signal', d => {
             if (!peers[d.from]) {
                 const p = new SimplePeer({ initiator: false, trickle: false, stream: stream, config: iceConfig });
@@ -151,58 +136,8 @@
             peers[id] = p;
         });
 
-        socket.on('phaseChange', d => {
-            document.getElementById('status').innerText = d.msg;
-            const list = document.getElementById('player-list'); list.innerHTML = "";
-            const me = d.players.find(p => p.id === socket.id);
-            const isNight = d.phase === "night";
-            if (!me.isAlive) { document.getElementById('status').innerText = "💀 مقتول"; return; }
-            d.players.forEach(p => {
-                if (p.id !== socket.id && p.isAlive) {
-                    const div = document.createElement('div'); div.className = "p-card";
-                    div.innerHTML = `${p.name}<br>`;
-                    let canAct = !isNight || (myRole.includes("مافيا") || myRole.includes("طبيب") || myRole.includes("شرطة"));
-                    if (canAct) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}')">اختيار</button>`;
-                    list.appendChild(div);
-                }
-            });
-        });
-
-        function act(tid) {
-            const isNight = document.getElementById('status').innerText.includes("الليل");
-            if (isNight) {
-                let type = myRole.includes("مافيا") ? "kill" : (myRole.includes("طبيب") ? "save" : (myRole.includes("شرطة") ? "check" : ""));
-                if (type) socket.emit('nightAction', { room, targetId: tid, type });
-            } else { socket.emit('submitVote', { room, targetId: tid }); }
-            document.getElementById('player-list').innerHTML = "<p>✅ تم</p>";
-        }
-
-        socket.on('assignRole', r => { myRole = r; document.getElementById('role').innerText = "دورك: " + r; });
-        socket.on('newMessage', d => {
-            const div = document.createElement('div');
-            div.innerHTML = `<b style="color:#ff2e63">${d.sender}:</b> ${d.text}`;
-            const box = document.getElementById('chatBox'); box.appendChild(div);
-            box.scrollTop = box.scrollHeight;
-            if (d.sender === "النظام") speak(d.text);
-        });
-
-        function toggleMic() {
-            micOn = !micOn; stream.getAudioTracks()[0].enabled = micOn;
-            const btn = document.getElementById('micBtn');
-            btn.innerText = micOn ? "🎤 الميكروفون: مفعّل" : "🔇 الميكروفون: مكتوم";
-            btn.style.background = micOn ? "#238636" : "#7a0000";
-        }
-
-        function send() {
-            const inp = document.getElementById('mInput');
-            if (inp.value) { socket.emit('sendMessage', { room, text: inp.value }); inp.value = ""; }
-        }
-
-        function speak(t) {
-            const m = new SpeechSynthesisUtterance(t);
-            m.lang = 'ar-SA'; m.pitch = 0.5; m.rate = 0.9;
-            window.speechSynthesis.speak(m);
-        }
+        function send() { const inp = document.getElementById('mInput'); if (inp.value) { socket.emit('sendMessage', { room, text: inp.value }); inp.value = ""; } }
+        function speak(t) { const m = new SpeechSynthesisUtterance(t); m.lang = 'ar-SA'; window.speechSynthesis.speak(m); }
     </script>
 </body>
 </html>
