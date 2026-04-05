@@ -36,7 +36,7 @@ io.on('connection', (socket) => {
         
         if (rd.phase === "night") {
             const receiver = rd.players.find(p => p.id === data.to);
-            if (sender.role?.includes("مافيا") && receiver.role?.includes("مافيا")) {
+            if (sender.role?.includes("مافيا") && receiver?.role?.includes("مافيا")) {
                 io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
             }
         } else {
@@ -50,7 +50,6 @@ io.on('connection', (socket) => {
             const voter = rd.players.find(p => p.id === socket.id);
             const target = rd.players.find(p => p.id === targetId);
             if (voter?.isAlive && !voter.isSpectator && target?.isAlive) {
-                // تعديل: السماح بتغيير التصويت
                 const oldTargetId = rd.votes[socket.id];
                 rd.votes[socket.id] = targetId;
                 let msg = oldTargetId ? `🔄 ${voter.name} غير تصويته إلى ${target.name}` : `📢 ${voter.name} صوّت ضد ${target.name}`;
@@ -66,7 +65,6 @@ io.on('connection', (socket) => {
         if (!actor?.isAlive || actor.isSpectator) return;
 
         if (type === "kill" && actor.role.includes("مافيا")) rd.nightActions.killed = targetId;
-        // تعديل: الطبيب يحمي نفسه أو غيره
         if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId;
         if (type === "check" && actor.role.includes("شرطة")) {
             const target = rd.players.find(p => p.id === targetId);
@@ -141,12 +139,18 @@ function startPhase(room, phase) {
     });
 
     rd.players.forEach(p => {
-        if (p.isAlive && !p.isSpectator) {
-            io.to(room).emit('user-connected', p.id);
-        }
         let canTalk = p.isAlive && !p.isSpectator && ((phase === "day") || (p.role?.includes("مافيا")));
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
+
+    // إرسال أمر الاتصال لجميع اللاعبين الأحياء بعد ثانية واحدة لضمان استقرار المرحلة
+    setTimeout(() => {
+        rd.players.forEach(p => {
+            if (p.isAlive && !p.isSpectator) {
+                io.to(room).emit('user-connected', p.id);
+            }
+        });
+    }, 1000);
 
     io.to(room).emit('updatePlayers', rd.players);
 
@@ -183,7 +187,7 @@ function endDay(room) {
     const rd = rooms[room];
     let counts = {};
     Object.values(rd.votes).forEach(id => counts[id] = (counts[id] || 0) + 1);
-    let victimId = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, null);
+    let victimId = Object.keys(counts).reduce((a, b) => (counts[a] || 0) > (counts[b] || 0) ? a : b, null);
     if (victimId) {
         const victim = rd.players.find(p => p.id === victimId);
         if (victim) { victim.isAlive = false; victim.isSpectator = true; io.to(room).emit('newMessage', { sender: "النظام", text: `⚖️ تم إعدام ${victim.name}.` }); }
