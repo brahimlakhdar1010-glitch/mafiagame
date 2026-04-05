@@ -1,130 +1,133 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <title>MAFIALAKHDAR | لعبة المافيا</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; text-align: center; margin: 0; padding: 0; }
-        .container { max-width: 800px; margin: auto; padding: 20px; }
-        .hidden { display: none; }
-        .rules-box { background: #333; padding: 15px; border-radius: 10px; margin: 20px 0; text-align: right; font-size: 0.9em; border: 1px solid #555; }
-        #game-screen { background: #222; min-height: 400px; border: 2px solid #444; position: relative; border-radius: 10px; margin-top: 10px; transition: background 1s; }
-        .night-theme { background: #0c0c20 !important; border-color: #3f51b5 !important; }
-        .day-theme { background: #444 !important; border-color: #ffc107 !important; }
-        #chat-box { height: 250px; overflow-y: auto; border-bottom: 1px solid #444; padding: 10px; text-align: right; background: rgba(0,0,0,0.2); }
-        .timer { font-size: 2.5em; color: #ff4444; font-weight: bold; text-shadow: 0 0 10px rgba(255,68,68,0.5); }
-        input, button { padding: 12px; margin: 5px; border-radius: 5px; border: none; }
-        button { background: #e74c3c; color: white; cursor: pointer; font-weight: bold; }
-        button:hover { background: #c0392b; }
-        .controls { margin-top: 15px; }
-        .dead-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 2em; color: white; pointer-events: none; }
-    </style>
-</head>
-<body>
-    <div id="login-screen" class="container">
-        <h1>MAFIALAKHDAR</h1>
-        <div class="rules-box">
-            <h3>📜 شرح الدخول والقوانين:</h3>
-            <p>1. أدخل اسمك ورقم الغرفة وكلمة السر الخاصة بأصدقائك.</p>
-            <p>2. <b>الليل (30 ثانية):</b> المافيا تختار ضحية، الطبيب يحمي، المحقق يكشف.</p>
-            <p>3. <b>النهار (4 دقائق):</b> نقاش حر عبر الشات أو الصوت ثم تصويت نهائي.</p>
-            <p>4. الميت لا يتكلم ولا يصوت حتى نهاية اللعبة.</p>
-        </div>
-        <input type="text" id="username" placeholder="اسمك المستعار">
-        <input type="text" id="roomID" placeholder="رقم الغرفة (مثال: 101)">
-        <input type="password" id="roomPass" placeholder="كلمة سر الغرفة">
-        <button onclick="joinRoom()">دخول اللعبة</button>
-    </div>
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 
-    <div id="game-area" class="container hidden">
-        <h2 id="room-title">الغرفة: </h2>
-        <div id="role-display" style="color: #ffc107; font-weight: bold;">جاري توزيع الأدوار...</div>
-        <div id="timer" class="timer">00:30</div>
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+app.use(express.static(__dirname + '/'));
+
+let rooms = {}; 
+
+io.on('connection', (socket) => {
+    socket.on('join-room', (data) => {
+        const { room, pass, user } = data;
+
+        if (!rooms[room]) {
+            rooms[room] = { 
+                password: pass, 
+                players: [], 
+                phase: 'waiting', 
+                timer: 30,
+                votes: {},
+                nightAction: { killed: null, saved: null }
+            };
+        }
+
+        if (rooms[room].password !== pass) {
+            return socket.emit('error', 'كلمة السر خاطئة!');
+        }
+
+        const player = { id: socket.id, name: user, role: 'civilian', alive: true };
+        rooms[room].players.push(player);
+        socket.join(room);
+
+        socket.emit('room-joined', { room });
+        io.to(room).emit('system-msg', `${user} انضم إلى اللعبة.`);
+
+        if (rooms[room].players.length >= 4 && rooms[room].phase === 'waiting') {
+            startCountdown(room);
+        }
+    });
+
+    socket.on('chat-msg', (data) => {
+        const room = rooms[data.room];
+        const player = room.players.find(p => p.id === socket.id);
+        if(player && player.alive) {
+            io.to(data.room).emit('system-msg', `${player.name}: ${data.msg}`);
+        }
+    });
+});
+
+function startCountdown(roomID) {
+    let timeLeft = 30;
+    rooms[roomID].phase = 'starting';
+    const interval = setInterval(() => {
+        timeLeft--;
+        io.to(roomID).emit('timer-update', timeLeft);
         
-        <div id="game-screen">
-            <div id="chat-box"></div>
-            <div id="action-buttons" class="controls"></div>
-        </div>
-
-        <div id="input-area">
-            <input type="text" id="msg-input" style="width: 70%;" placeholder="اكتب رسالتك هنا...">
-            <button onclick="sendMessage()">إرسال</button>
-            <button id="mic-btn" style="background: #2ecc71;">🎤 الميكروفون: مغلق</button>
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        let myRole = "";
-        let isAlive = true;
-        let myRoom = "";
-
-        function joinRoom() {
-            const user = document.getElementById('username').value;
-            const room = document.getElementById('roomID').value;
-            const pass = document.getElementById('roomPass').value;
-            if(!user || !room || !pass) return alert("يرجى ملء جميع الخانات");
-            
-            myRoom = room;
-            socket.emit('join-room', { user, room, pass });
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            assignRoles(roomID);
+            startNightPhase(roomID);
         }
+    }, 1000);
+}
 
-        socket.on('room-joined', (msg) => {
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('game-area').classList.remove('hidden');
-            document.getElementById('room-title').innerText = "الغرفة: " + msg.room;
-        });
+function assignRoles(roomID) {
+    let players = rooms[roomID].players;
+    // توزيع المافيا (20%)
+    let mafiaCount = Math.max(1, Math.floor(players.length * 0.2));
+    let shuffled = [...players].sort(() => 0.5 - Math.random());
 
-        socket.on('error', (err) => alert(err));
+    shuffled.forEach((p, i) => {
+        let role = 'civilian';
+        if (i < mafiaCount) role = 'mafia';
+        else if (i === mafiaCount) role = 'doctor';
+        else if (i === mafiaCount + 1) role = 'detective';
+        
+        p.role = role;
+        io.to(p.id).emit('your-role', role);
+    });
+}
 
-        socket.on('system-msg', (text) => {
-            const chat = document.getElementById('chat-box');
-            chat.innerHTML += `<p style="color:#00ff00; border-bottom: 1px solid #333; padding: 5px;">📢 ${text}</p>`;
-            chat.scrollTop = chat.scrollHeight;
-            playSystemSound(text);
-        });
+function startNightPhase(roomID) {
+    const room = rooms[roomID];
+    room.phase = 'night';
+    let timeLeft = 30;
+    
+    io.to(roomID).emit('phase-change', 'night');
+    io.to(roomID).emit('system-msg', "حلّ الظلام على المدينة.. أيها الأشرار استيقظوا.");
 
-        socket.on('timer-update', (time) => {
-            let mins = Math.floor(time / 60);
-            let secs = time % 60;
-            document.getElementById('timer').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        });
-
-        socket.on('your-role', (role) => {
-            myRole = role;
-            document.getElementById('role-display').innerText = "دورك هو: " + role.toUpperCase();
-        });
-
-        socket.on('phase-change', (phase) => {
-            const screen = document.getElementById('game-screen');
-            if(phase === 'night') {
-                screen.className = "night-theme";
-            } else {
-                screen.className = "day-theme";
-            }
-        });
-
-        function sendMessage() {
-            const input = document.getElementById('msg-input');
-            if(input.value && isAlive) {
-                socket.emit('chat-msg', { room: myRoom, msg: input.value });
-                input.value = "";
-            }
+    const interval = setInterval(() => {
+        timeLeft--;
+        io.to(roomID).emit('timer-update', timeLeft);
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            startDayPhase(roomID);
         }
+    }, 1000);
+}
 
-        function playSystemSound(text) {
-            // سيتم استدعاء الملفات الصوتية هنا (يجب رفعها في مجلد sounds)
-            let audioPath = "";
-            if(text.includes("حلّ الظلام")) audioPath = "/sounds/night.mp3";
-            if(text.includes("استيقظت المدينة")) audioPath = "/sounds/day.mp3";
-            if(text.includes("رحيل")) audioPath = "/sounds/death.mp3";
-            
-            if(audioPath) {
-                let audio = new Audio(audioPath);
-                audio.play().catch(() => console.log("انتظر تفاعل المستخدم لتشغيل الصوت"));
-            }
+function startDayPhase(roomID) {
+    const room = rooms[roomID];
+    room.phase = 'day';
+    let timeLeft = 240; // 4 دقائق
+
+    io.to(roomID).emit('phase-change', 'day');
+    
+    // منطق القتل والنجاة (مثال مبسط)
+    if(room.nightAction.killed && room.nightAction.killed !== room.nightAction.saved) {
+        let victim = room.players.find(p => p.id === room.nightAction.killed);
+        if(victim) {
+            victim.alive = false;
+            io.to(roomID).emit('system-msg', `للأسف، استيقظت المدينة على خبر رحيل ${victim.name}.. لقد كان مواطناً.`);
         }
-    </script>
-</body>
-</html>
+    } else {
+        io.to(roomID).emit('system-msg', "حاولت المافيا ارتكاب جريمة، لكن الطبيب كان في المكان المناسب!");
+    }
+
+    const interval = setInterval(() => {
+        timeLeft--;
+        io.to(roomID).emit('timer-update', timeLeft);
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            // هنا يتم حساب التصويت والإعدام ثم العودة لليل
+            startNightPhase(roomID);
+        }
+    }, 1000);
+}
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`MAFIALAKHDAR running on port ${PORT}`));
