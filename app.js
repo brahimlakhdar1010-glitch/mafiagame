@@ -30,6 +30,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('signal', (data) => {
+        // تمرير الإشارة مباشرة للطرف الآخر دون فلاتر معقدة لضمان الربط
         io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
     });
 
@@ -52,7 +53,7 @@ io.on('connection', (socket) => {
         if (!actor?.isAlive) return;
 
         if (type === "kill" && actor.role.includes("مافيا")) rd.nightActions.killed = targetId;
-        if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId; // يسمح بحماية أي لاعب (بما فيهم نفسه)
+        if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId;
         if (type === "check" && actor.role.includes("شرطة")) {
             const target = rd.players.find(p => p.id === targetId);
             socket.emit('newMessage', { sender: "النظام", text: `🔍 نتيجة التحقيق: ${target.name} هو ${target?.role?.includes("مافيا") ? "مافيا 🕵️" : "مواطن ✅"}` });
@@ -78,7 +79,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// باقي الدوال (startWaitingTimer, startGame, startPhase, endNight, endDay, checkGameOver) تبقى كما هي في الكود المستقر الأخير
 function startWaitingTimer(room) {
     const rd = rooms[room];
     rd.timerStarted = true;
@@ -118,11 +118,13 @@ function startPhase(room, phase) {
 
     io.to(room).emit('phaseChange', { phase, msg: phase === "night" ? "الليل: المافيا تخطط." : "النهار: وقت النقاش." });
 
+    // تحديث صلاحية الميكروفون
     rd.players.forEach(p => {
         let canTalk = p.isAlive && (phase === "day" || p.role?.includes("مافيا"));
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
 
+    // تأخير بسيط لبدء ربط الصوت لضمان استقرار المتصفحات
     setTimeout(() => {
         rd.players.forEach(p => {
             if (p.isAlive) io.to(room).emit('user-connected', p.id);
