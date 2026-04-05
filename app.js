@@ -69,7 +69,6 @@ io.on('connection', (socket) => {
         if (type === "check" && actor.role.includes("شرطة")) {
             const target = rd.players.find(p => p.id === targetId);
             const isMafia = target?.role?.includes("مافيا");
-            // النتيجة تظهر للشرطي فقط
             socket.emit('newMessage', { sender: "النظام", text: `🔍 نتيجة التحقيق: ${target.name} هو ${isMafia ? "مافيا 🕵️" : "مواطن صالِح ✅"}` });
         }
     });
@@ -132,7 +131,6 @@ function startPhase(room, phase) {
     if (!rd) return;
     rd.phase = phase;
     rd.votes = {};
-    // تعديل التوقيت: ليل 45 ثانية، نهار 4 دقائق (240 ثانية)
     let timeLeft = phase === "night" ? 45 : 240;
 
     io.to(room).emit('phaseChange', { 
@@ -140,13 +138,15 @@ function startPhase(room, phase) {
         msg: phase === "night" ? "الليل: المافيا تخطط." : "النهار: وقت النقاش."
     });
 
-    io.to(room).emit('resetAudio'); 
-    io.to(room).emit('updatePlayers', rd.players);
-
+    // التعديل الهام: إعادة تنشيط الاتصال الصوتي للجميع عند تبدل المرحلة
     rd.players.forEach(p => {
+        io.to(room).emit('user-connected', p.id);
+        
         let canTalk = p.isAlive && !p.isSpectator && ((phase === "day") || (p.role?.includes("مافيا")));
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
+
+    io.to(room).emit('updatePlayers', rd.players);
 
     clearInterval(rd.timerInterval);
     rd.timerInterval = setInterval(() => {
