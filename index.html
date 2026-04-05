@@ -1,80 +1,14 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <title>MAFIALAKHDAR | لعبة المافيا</title>
-    <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; }
-        .container { max-width: 800px; margin: auto; padding: 20px; }
-        .hidden { display: none; }
-        .rules-box { background: #333; padding: 15px; border-radius: 10px; margin: 20px 0; text-align: right; font-size: 0.9em; }
-        #game-screen { background: #222; height: 500px; border: 2px solid #444; position: relative; }
-        .night { background: #0c0c20 !important; color: #aaf; }
-        .day { background: #f0f0f0 !important; color: #333; }
-        #chat-box { height: 300px; overflow-y: scroll; border: 1px solid #555; margin: 10px; padding: 10px; background: rgba(0,0,0,0.3); }
-        .timer { font-size: 2em; color: #ff4444; }
-    </style>
-</head>
-<body>
-    <div id="login-screen" class="container">
-        <h1>MAFIALAKHDAR</h1>
-        <div class="rules-box">
-            <h3>📜 قوانين الدخول واللعبة:</h3>
-            <ul>
-                <li>أدخل اسمك ورقم الغرفة وكلمة السر.</li>
-                <li>لا يمكن لأحد الدخول للغرفة بدون كلمة السر الصحيحة.</li>
-                <li>تتكون اللعبة من دورتين: <b>ليل</b> (قدرات سرية) و <b>نهار</b> (نقاش وتصويت).</li>
-                <li>المافيا تقتل، الطبيب يحمي، والمحقق يكشف الهويات.</li>
-            </ul>
-        </div>
-        <input type="text" id="username" placeholder="اسمك">
-        <input type="text" id="roomID" placeholder="رقم الغرفة">
-        <input type="password" id="roomPass" placeholder="كلمة السر">
-        <button onclick="joinRoom()">دخول الغرفة</button>
-    </div>
+// دالة لتشغيل الأصوات
+function playSystemSound(text) {
+    let audioFile = "";
+    
+    if (text.includes("حلّ الظلام")) audioFile = "/sounds/night_start.mp3";
+    else if (text.includes("استيقظت المدينة")) audioFile = "/sounds/day_start.mp3";
+    else if (text.includes("الطبيب كان في المكان المناسب")) audioFile = "/sounds/saved.mp3";
+    else if (text.includes("انضم إلى اللعبة")) audioFile = "/sounds/join.mp3";
 
-    <div id="game-area" class="container hidden">
-        <h2 id="room-title">الغرفة: </h2>
-        <div id="timer" class="timer">00:30</div>
-        <div id="game-screen">
-            <div id="chat-box"></div>
-            <div id="action-buttons"></div>
-        </div>
-        <input type="text" id="msg-input" placeholder="اكتب هنا...">
-        <button onclick="sendMessage()">إرسال</button>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        let myRole = "";
-
-        function joinRoom() {
-            const data = {
-                user: document.getElementById('username').value,
-                room: document.getElementById('roomID').value,
-                pass: document.getElementById('roomPass').value
-            };
-            socket.emit('join-room', data);
-        }
-
-        socket.on('room-joined', (msg) => {
-            document.getElementById('login-screen').classList.add('hidden');
-            document.getElementById('game-area').classList.remove('hidden');
-            document.getElementById('room-title').innerText += msg.room;
-        });
-
-        socket.on('system-msg', (text) => {
-            const chat = document.getElementById('chat-box');
-            chat.innerHTML += `<p style="color:yellow">📢 ${text}</p>`;
-            // هنا يمكنك تشغيل ملف صوتي للنظام بصوت رجل حاد
-            playSystemSound(text);
-        });
-
-        function playSystemSound(text) {
-            // كود تشغيل الصوت (يحتاج ملفات mp3 مسجلة مسبقاً)
-            console.log("صوت النظام: " + text);
-        }
-    </script>
-</body>
-</html>
+    if (audioFile) {
+        const audio = new Audio(audioFile);
+        audio.play().catch(e => console.log("تحتاج للتفاعل مع الصفحة أولاً لتشغيل الصوت"));
+    }
+}
