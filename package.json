@@ -1,7 +1,7 @@
 {
   "name": "mafialakhdar",
   "version": "1.0.0",
-  "description": "Multiplayer Mafia Game",
+  "description": "Multiplayer Mafia Game - MAFIALAKHDAR",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
