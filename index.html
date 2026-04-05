@@ -11,8 +11,8 @@
             background: radial-gradient(circle at center, #1a1c2c 0%, #070b14 100%);
             color: #e2e8f0; font-family: 'Segoe UI', sans-serif;
             display: flex; flex-direction: column; align-items: center; 
-            min-height: 100vh; margin: 0; padding: 10px; /* تقليل الحواف للهاتف */
-            overflow-x: hidden; /* منع التمرير الجانبي */
+            min-height: 100vh; margin: 0; padding: 10px;
+            overflow-x: hidden;
         }
         .logo { font-size: 2.2rem; font-weight: 900; background: linear-gradient(to bottom, #ff2e63, #5a0000); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px #ff2e63); margin: 15px 0; }
         
@@ -24,8 +24,7 @@
         }
 
         #chatBox { 
-            width: 95vw; /* عرض كامل الشاشة تقريباً على الهاتف */
-            max-width: 450px; height: 300px; 
+            width: 95vw; max-width: 450px; height: 300px; 
             background: rgba(22, 27, 34, 0.8); border: 1px solid #30363d; 
             border-radius: 15px; overflow-y: auto; padding: 10px; margin-bottom: 10px; 
         }
@@ -33,19 +32,18 @@
         .p-card { 
             background: rgba(33, 38, 45, 0.9); border-bottom: 3px solid #ff2e63; 
             padding: 10px; border-radius: 10px; margin: 5px; text-align: center; 
-            flex: 1 1 40%; /* جعل بطاقات اللاعبين تترتب بشكل أفضل على الموبايل */
-            max-width: 150px; font-size: 0.9rem;
+            flex: 1 1 40%; max-width: 150px; font-size: 0.9rem;
         }
 
         .btn-act { 
             background: #ff2e63; color: white; border: none; 
             padding: 10px 15px; border-radius: 20px; cursor: pointer; 
-            font-weight: bold; margin-top: 5px; width: 100%; /* زر كبير ليسهل لمسه */
+            font-weight: bold; margin-top: 5px; width: 100%;
         }
 
         input { 
             background: #0d1117; border: 1px solid #30363d; color: white; 
-            padding: 12px; border-radius: 25px; width: 85vw; /* مدخلات واسعة للهاتف */
+            padding: 12px; border-radius: 25px; width: 85vw; 
             max-width: 300px; text-align: center; margin-bottom: 10px; font-size: 1rem;
         }
 
@@ -55,10 +53,19 @@
             cursor: pointer; font-size: 1.2rem; width: 85vw; max-width: 300px;
         }
 
-        /* تحسين صندوق الرسائل في الأسفل */
-        .input-group {
-            display: flex; gap: 5px; width: 95vw; max-width: 450px; align-items: center;
+        /* تنسيق قسم الدليل الجديد */
+        .guide-section {
+            width: 90vw; max-width: 450px; background: rgba(13, 17, 23, 0.8);
+            border: 1px border-style: solid border-color: #30363d; border-radius: 15px;
+            padding: 20px; margin-top: 30px; text-align: right;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
+        .guide-section h2 { color: #ff2e63; font-size: 1.3rem; margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 5px; }
+        .guide-section h3 { color: #f0e050; font-size: 1rem; margin-top: 15px; }
+        .guide-section p, .guide-section li { font-size: 0.85rem; color: #adb5bd; line-height: 1.5; }
+        .guide-section ul { padding-right: 20px; margin: 5px 0; }
+
+        .input-group { display: flex; gap: 5px; width: 95vw; max-width: 450px; align-items: center; }
     </style>
 </head>
 <body>
@@ -69,6 +76,24 @@
             <input type="text" id="rName" placeholder="رقم الغرفة"><br>
             <input type="password" id="rPass" placeholder="كلمة السر"><br>
             <button id="joinBtn" onclick="join()">ابدأ المهمة</button>
+
+            <div class="guide-section">
+                <h2>📖 دليل اللعبة والقوانين</h2>
+                
+                <h3>🔹 كيف تنضم؟</h3>
+                <p>أدخل اسمك ورقم الغرفة وكلمة السر الموحدة مع أصدقائك. تأكد من تفعيل "الميكروفون" عند الطلب للتواصل الصوتي.</p>
+
+                <h3>🎭 الأدوار الأساسية:</h3>
+                <ul>
+                    <li><b>المافيا 👤:</b> القضاء على المواطنين ليلاً دون كشف الهوية.</li>
+                    <li><b>الطبيب 🧑‍⚕️:</b> حماية لاعب واحد كل ليلة من القتل.</li>
+                    <li><b>الشرطة 👮:</b> التحقيق في هوية لاعب واحد كل ليلة.</li>
+                    <li><b>المواطن 👤:</b> كشف المافيا بالتصويت في النهار.</li>
+                </ul>
+
+                <h3>⏳ مراحل اللعبة:</h3>
+                <p>اللعبة تنتقل بين <b>الليل</b> (تنفيذ الأدوار السرية) و <b>النهار</b> (النقاش والتصويت العلني لإعدام المشتبه بهم).</p>
+            </div>
         </center>
     </div>
 
@@ -86,7 +111,6 @@
     </div>
 
     <script>
-        // (نفس كود الـ JavaScript السابق دون تغيير في المنطق، فقط أضفنا تحسينات الرؤية)
         const socket = io();
         let stream, room, myRole, peers = {}, micOn = true;
         const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
