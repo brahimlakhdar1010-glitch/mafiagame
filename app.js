@@ -30,7 +30,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('signal', (data) => {
-        // تمرير الإشارة مباشرة للطرف الآخر دون فلاتر معقدة لضمان الربط
         io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
     });
 
@@ -40,8 +39,9 @@ io.on('connection', (socket) => {
             const voter = rd.players.find(p => p.id === socket.id);
             const target = rd.players.find(p => p.id === targetId);
             if (voter?.isAlive && !voter.isSpectator && target?.isAlive) {
-                rd.votes[socket.id] = targetId;
-                io.to(room).emit('newMessage', { sender: "النظام", text: `📢 ${voter.name} صوّت ضد ${target.name}` });
+                // تعديل: السماح بتغيير التصويت (القيمة الجديدة تمسح القديمة تلقائياً في Object)
+                rd.votes[socket.id] = targetId; 
+                io.to(room).emit('newMessage', { sender: "النظام", text: `📢 ${voter.name} غيّر صوته ضد ${target.name}` });
             }
         }
     });
@@ -53,6 +53,7 @@ io.on('connection', (socket) => {
         if (!actor?.isAlive) return;
 
         if (type === "kill" && actor.role.includes("مافيا")) rd.nightActions.killed = targetId;
+        // تعديل: الطبيب يحمي أي شخص (لا يوجد شرط يمنعه من اختيار نفسه)
         if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId;
         if (type === "check" && actor.role.includes("شرطة")) {
             const target = rd.players.find(p => p.id === targetId);
@@ -118,18 +119,15 @@ function startPhase(room, phase) {
 
     io.to(room).emit('phaseChange', { phase, msg: phase === "night" ? "الليل: المافيا تخطط." : "النهار: وقت النقاش." });
 
-    // تحديث صلاحية الميكروفون
     rd.players.forEach(p => {
         let canTalk = p.isAlive && (phase === "day" || p.role?.includes("مافيا"));
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
 
-    // تأخير بسيط لبدء ربط الصوت لضمان استقرار المتصفحات
-    setTimeout(() => {
-        rd.players.forEach(p => {
-            if (p.isAlive) io.to(room).emit('user-connected', p.id);
-        });
-    }, 1000);
+    // تحسين الصوت: إرسال أمر الربط فوراً وبدون تأخير طويل
+    rd.players.forEach(p => {
+        if (p.isAlive) io.to(room).emit('user-connected', p.id);
+    });
 
     clearInterval(rd.timerInterval);
     rd.timerInterval = setInterval(() => {
@@ -148,6 +146,8 @@ function endNight(room) {
     if (killed && killed !== saved) {
         const p = rd.players.find(x => x.id === killed);
         if (p) { p.isAlive = false; p.isSpectator = true; io.to(room).emit('newMessage', { sender: "النظام", text: `💀 مات ${p.name} الليلة.` }); }
+    } else if (killed && killed === saved) {
+        io.to(room).emit('newMessage', { sender: "النظام", text: "🏥 حاول القاتل تنفيذ جريمته لكن الطبيب كان هناك!" });
     } else {
         io.to(room).emit('newMessage', { sender: "النظام", text: "🌅 مر الليل بسلام." });
     }
