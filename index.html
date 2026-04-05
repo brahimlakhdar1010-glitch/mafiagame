@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA LAKHDAR | FINAL FIX</title>
+    <title>MAFIA LAKHDAR | VOIP FIXED</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <style>
-        /* التنسيقات كما هي بدون تغيير */
         body { background: radial-gradient(circle at center, #1a1c2c 0%, #070b14 100%); color: #e2e8f0; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 10px; overflow-x: hidden; }
         .logo { font-size: 2.2rem; font-weight: 900; background: linear-gradient(to bottom, #ff2e63, #5a0000); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px #ff2e63); margin: 15px 0; }
         .rules-box { background: rgba(22, 27, 34, 0.9); border: 1px solid #ff2e63; border-radius: 15px; padding: 15px; max-width: 400px; margin-bottom: 20px; font-size: 0.9rem; line-height: 1.6; text-align: right; }
@@ -26,6 +25,14 @@
     <div id="login-screen">
         <center>
             <div class="logo">MAFIA LAKHDAR</div>
+            <div class="rules-box">
+                <h3 style="color:#ff2e63; margin-top:0;">📖 القوانين والتعليمات:</h3>
+                • <b>الدخول:</b> أدخل اسمك ورقم غرفة موحد مع أصدقائك.<br>
+                • <b>الليل:</b> المافيا يتحدثون ويختارون الضحية. المواطنون صامتون.<br>
+                • <b>النهار:</b> النقاش مفتوح للجميع (بما فيهم المافيا) كشف المجرمين.<br>
+                • <b>الأدوار:</b> المافيا يقتلون، الطبيب يحمي، والشرطة تكشف.<br>
+                • <b>تنبيه:</b> يمكنك تغيير تصويتك في أي وقت خلال النهار.
+            </div>
             <input type="text" id="pName" placeholder="اسمك المستعار"><br>
             <input type="text" id="rName" placeholder="رقم الغرفة"><br>
             <input type="password" id="rPass" placeholder="كلمة السر"><br>
@@ -46,32 +53,41 @@
         <button id="micBtn" onclick="toggleMic()" class="mic-active" style="width:95vw; max-width:450px; margin-top:10px; color:white; border:none; padding:12px; border-radius:12px; font-weight:bold;">🎤 ميكروفون: يعمل</button>
     </div>
 
-    <div id="audios"></div>
+    <div id="audios" style="display:none;"></div>
 
     <script>
         const socket = io();
         let stream, room, myRole = "", peers = {}, userMicEnabled = true, systemMicAllowed = true;
         let nightActionUsed = false;
-
-        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
-        // حل مشكلة الصوت في الهاتف: تشغيل جميع القنوات عند أول لمسة
-        window.addEventListener('touchstart', () => {
-            document.querySelectorAll('audio').forEach(a => {
-                a.play().catch(() => {});
-            });
-        }, { once: false });
+        
+        // خوادم الجليد (ICE) ضرورية جداً للصوت عبر الإنترنت
+        const iceConfig = { iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
+        ] };
 
         async function join() {
             const name = document.getElementById('pName').value;
             room = document.getElementById('rName').value;
             if (name && room) {
                 try {
+                    // طلب الميكروفون
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    // إصلاح مشكلة المتصفحات المحمولة: تشغيل السياق الصوتي بعد ضغطة زر
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const audioCtx = new AudioContext();
+                    if (audioCtx.state === 'suspended') {
+                        await audioCtx.resume();
+                    }
+
                     socket.emit('joinRoom', { name, room, password: document.getElementById('rPass').value });
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'flex';
-                } catch(e) { alert("يجب السماح بالميكروفون"); }
+                } catch(e) { 
+                    alert("يجب السماح للميكروفون للعب! تأكد من إعدادات المتصفح."); 
+                }
             }
         }
 
@@ -81,10 +97,20 @@
         });
 
         function updateMicHardware() {
-            if (stream) stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
             const btn = document.getElementById('micBtn');
-            if (!systemMicAllowed) { btn.className = "mic-disabled"; btn.innerText = "🔇 صمت مطبق"; }
-            else { btn.className = userMicEnabled ? "mic-active" : "mic-muted"; btn.innerText = userMicEnabled ? "🎤 ميكروفون يعمل" : "🔇 ميكروفون مقفل"; }
+            if (stream) {
+                stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
+            }
+            if (!systemMicAllowed) { 
+                btn.innerText = "🔇 الليل: صمت مطبق"; 
+                btn.className = "mic-disabled"; 
+            } else if (!userMicEnabled) { 
+                btn.innerText = "🔇 ميكروفونك: مقفل"; 
+                btn.className = "mic-muted"; 
+            } else { 
+                btn.innerText = "🎤 ميكروفونك: يعمل"; 
+                btn.className = "mic-active"; 
+            }
         }
 
         function toggleMic() {
@@ -95,14 +121,20 @@
 
         socket.on('phaseChange', d => {
             if(d.phase === "night") nightActionUsed = false;
-            document.getElementById('status').innerText = d.msg;
-            Object.keys(peers).forEach(id => { peers[id].destroy(); delete peers[id]; });
+            document.getElementById('status').innerText = (d.phase === "night" ? "🌙 " : "☀️ ") + d.msg;
+            
+            // تنظيف الاتصالات لضمان جودة الصوت
+            Object.keys(peers).forEach(id => {
+                if(peers[id]) peers[id].destroy();
+                delete peers[id];
+            });
             document.getElementById('audios').innerHTML = "";
         });
 
         socket.on('signal', d => {
-            if (peers[d.from]) peers[d.from].signal(d.signal);
-            else {
+            if (peers[d.from]) {
+                peers[d.from].signal(d.signal);
+            } else {
                 const p = new SimplePeer({ initiator: false, trickle: false, stream: stream, config: iceConfig });
                 p.on('signal', s => socket.emit('signal', { to: d.from, signal: s }));
                 p.on('stream', st => createAudio(d.from, st));
@@ -125,40 +157,56 @@
                 audio = document.createElement('audio');
                 audio.id = "audio-" + id;
                 audio.autoplay = true;
-                audio.playsInline = true;
+                audio.playsInline = true; // مهم للهواتف
                 document.getElementById('audios').appendChild(audio);
             }
             audio.srcObject = remoteStream;
-            const isNight = document.getElementById('status').innerText.includes("الليل");
-            audio.muted = (isNight && !myRole.includes("مافيا"));
+            
+            // كتم الصوت برمجياً حسب المرحلة والدور
+            const isNight = document.getElementById('status').innerText.includes("🌙");
+            if (isNight) {
+                audio.muted = !myRole.includes("مافيا");
+            } else {
+                audio.muted = false;
+            }
+            
+            // محاولة التشغيل قسراً للهواتف
+            audio.play().catch(e => console.log("تحتاج ضغطة زر لتشغيل الصوت"));
         }
 
         socket.on('updatePlayers', players => {
             const list = document.getElementById('player-list'); list.innerHTML = "";
-            const isNight = document.getElementById('status').innerText.includes("الليل");
+            const isNight = document.getElementById('status').innerText.includes("🌙");
             const me = players.find(p => p.id === socket.id);
             players.forEach(p => {
                 const div = document.createElement('div'); div.className = "p-card";
-                div.innerHTML = `${p.name} ${p.id === socket.id ? "(أنت)" : ""}<br>`;
-                if (me?.isAlive && p.isAlive) {
-                    if (isNight && !nightActionUsed) {
-                        if (myRole.includes("مافيا") && p.id !== socket.id) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">قتل</button>`;
-                        if (myRole.includes("طبيب")) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">حماية</button>`;
-                        if (myRole.includes("شرطة") && p.id !== socket.id) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">كشف</button>`;
-                    } else if (!isNight && p.id !== socket.id) {
-                        div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">تصويت</button>`;
+                div.innerHTML = `${p.isSpectator ? "👁️ " : ""}${p.name} ${p.id === socket.id ? "(أنت)" : ""}<br>`;
+                
+                if (me?.isAlive && !me.isSpectator && p.isAlive && !p.isSpectator) {
+                    let showBtn = false;
+                    if (isNight) {
+                        if (!nightActionUsed) {
+                            if (myRole.includes("مافيا") && p.id !== socket.id) showBtn = true;
+                            if (myRole.includes("طبيب")) showBtn = true; 
+                            if (myRole.includes("شرطة") && p.id !== socket.id) showBtn = true;
+                        }
+                    } else if (p.id !== socket.id) {
+                        showBtn = true; 
                     }
+                    if (showBtn) div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">اختيار</button>`;
                 }
                 list.appendChild(div);
             });
         });
 
         function act(tid, btn) {
-            const isNight = document.getElementById('status').innerText.includes("الليل");
+            const isNight = document.getElementById('status').innerText.includes("🌙");
             if (isNight) {
+                if(nightActionUsed) return;
                 let type = myRole.includes("مافيا") ? "kill" : (myRole.includes("طبيب") ? "save" : "check");
                 socket.emit('nightAction', { room, targetId: tid, type });
                 nightActionUsed = true;
+                btn.style.opacity = "0.5"; btn.innerText = "تم";
             } else {
                 socket.emit('submitVote', { room, targetId: tid });
             }
@@ -169,7 +217,7 @@
         socket.on('newMessage', d => {
             const box = document.getElementById('chatBox');
             const div = document.createElement('div');
-            div.innerHTML = `<b>${d.sender}:</b> ${d.text}`;
+            div.innerHTML = `<b style="color:#ff2e63">${d.sender}:</b> ${d.text}`;
             box.appendChild(div); box.scrollTop = box.scrollHeight;
         });
 
