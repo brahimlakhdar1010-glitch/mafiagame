@@ -29,20 +29,17 @@ io.on('connection', (socket) => {
         if (rd.players.length >= 4 && !rd.timerStarted && rd.phase === "waiting") startWaitingTimer(room);
     });
 
-    // تبادل إشارات WebRTC للصوت
     socket.on('signal', (data) => {
         const rd = Object.values(rooms).find(r => r.players.some(p => p.id === socket.id));
         if (!rd) return;
         const sender = rd.players.find(p => p.id === socket.id);
         
-        // منع المافيا من تسريب إشارات الصوت لغيرهم في الليل
         if (rd.phase === "night") {
             const receiver = rd.players.find(p => p.id === data.to);
             if (sender.role?.includes("مافيا") && receiver.role?.includes("مافيا")) {
                 io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
             }
         } else {
-            // في النهار التبادل مفتوح للجميع
             io.to(data.to).emit('signal', { from: socket.id, signal: data.signal });
         }
     });
@@ -53,8 +50,11 @@ io.on('connection', (socket) => {
             const voter = rd.players.find(p => p.id === socket.id);
             const target = rd.players.find(p => p.id === targetId);
             if (voter?.isAlive && !voter.isSpectator && target?.isAlive) {
+                // تعديل: السماح بتغيير التصويت
+                const oldTargetId = rd.votes[socket.id];
                 rd.votes[socket.id] = targetId;
-                io.to(room).emit('newMessage', { sender: "النظام", text: `📢 ${voter.name} صوّت ضد ${target.name}` });
+                let msg = oldTargetId ? `🔄 ${voter.name} غير تصويته إلى ${target.name}` : `📢 ${voter.name} صوّت ضد ${target.name}`;
+                io.to(room).emit('newMessage', { sender: "النظام", text: msg });
             }
         }
     });
@@ -66,6 +66,7 @@ io.on('connection', (socket) => {
         if (!actor?.isAlive || actor.isSpectator) return;
 
         if (type === "kill" && actor.role.includes("مافيا")) rd.nightActions.killed = targetId;
+        // تعديل: الطبيب يحمي نفسه أو غيره
         if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId;
         if (type === "check" && actor.role.includes("شرطة")) {
             const target = rd.players.find(p => p.id === targetId);
@@ -139,13 +140,10 @@ function startPhase(room, phase) {
         msg: phase === "night" ? "الليل: المافيا تخطط." : "النهار: وقت النقاش."
     });
 
-    // تفعيل التحكم في الميكروفون وإعادة الاتصال
     rd.players.forEach(p => {
-        // إرسال أمر "اتصل بالآخرين" لكل لاعب حي
         if (p.isAlive && !p.isSpectator) {
             io.to(room).emit('user-connected', p.id);
         }
-        
         let canTalk = p.isAlive && !p.isSpectator && ((phase === "day") || (p.role?.includes("مافيا")));
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
@@ -173,7 +171,7 @@ function endNight(room) {
         if (victim) { victim.isAlive = false; victim.isSpectator = true; }
         io.to(room).emit('newMessage', { sender: "النظام", text: `💀 استيقظت المدينة على خبر مقتل ${victim?.name || "أحدهم"}.` });
     } else if (killedId && killedId === savedId) {
-        io.to(room).emit('newMessage', { sender: "النظام", text: `🏥 الطبيب أنقذ الضحية! ✅` });
+        io.to(room).emit('newMessage', { sender: "النظام", text: `🏥 الطبيب أنقذ الضحية من موت محقق! ✅` });
     } else {
         io.to(room).emit('newMessage', { sender: "النظام", text: `🌅 مر الليل بسلام.` });
     }
@@ -202,6 +200,4 @@ function checkGameOver(room) {
     return false;
 }
 
-server.listen(process.env.PORT || 3000, () => {
-    console.log("Server is running...");
-});
+server.listen(process.env.PORT || 3000);
