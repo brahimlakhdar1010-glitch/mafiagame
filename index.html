@@ -59,10 +59,12 @@
         const socket = io();
         let stream, room, myRole = "", peers = {}, userMicEnabled = true, systemMicAllowed = true;
         let nightActionUsed = false;
-        // خوادم الاستقرار للاتصال عبر الإنترنت
+        
+        // خوادم الجليد (ICE) ضرورية جداً للصوت عبر الإنترنت
         const iceConfig = { iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
         ] };
 
         async function join() {
@@ -70,11 +72,22 @@
             room = document.getElementById('rName').value;
             if (name && room) {
                 try {
+                    // طلب الميكروفون
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    // إصلاح مشكلة المتصفحات المحمولة: تشغيل السياق الصوتي بعد ضغطة زر
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    const audioCtx = new AudioContext();
+                    if (audioCtx.state === 'suspended') {
+                        await audioCtx.resume();
+                    }
+
                     socket.emit('joinRoom', { name, room, password: document.getElementById('rPass').value });
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'flex';
-                } catch(e) { alert("يرجى السماح بالوصول للميكروفون!"); }
+                } catch(e) { 
+                    alert("يجب السماح للميكروفون للعب! تأكد من إعدادات المتصفح."); 
+                }
             }
         }
 
@@ -85,10 +98,19 @@
 
         function updateMicHardware() {
             const btn = document.getElementById('micBtn');
-            if (stream) stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
-            if (!systemMicAllowed) { btn.innerText = "🔇 الليل: صمت مطبق"; btn.className = "mic-disabled"; }
-            else if (!userMicEnabled) { btn.innerText = "🔇 ميكروفونك: مقفل"; btn.className = "mic-muted"; }
-            else { btn.innerText = "🎤 ميكروفونك: يعمل"; btn.className = "mic-active"; }
+            if (stream) {
+                stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
+            }
+            if (!systemMicAllowed) { 
+                btn.innerText = "🔇 الليل: صمت مطبق"; 
+                btn.className = "mic-disabled"; 
+            } else if (!userMicEnabled) { 
+                btn.innerText = "🔇 ميكروفونك: مقفل"; 
+                btn.className = "mic-muted"; 
+            } else { 
+                btn.innerText = "🎤 ميكروفونك: يعمل"; 
+                btn.className = "mic-active"; 
+            }
         }
 
         function toggleMic() {
@@ -101,7 +123,7 @@
             if(d.phase === "night") nightActionUsed = false;
             document.getElementById('status').innerText = (d.phase === "night" ? "🌙 " : "☀️ ") + d.msg;
             
-            // تنظيف القنوات القديمة بشكل كامل
+            // تنظيف الاتصالات لضمان جودة الصوت
             Object.keys(peers).forEach(id => {
                 if(peers[id]) peers[id].destroy();
                 delete peers[id];
@@ -135,17 +157,21 @@
                 audio = document.createElement('audio');
                 audio.id = "audio-" + id;
                 audio.autoplay = true;
+                audio.playsInline = true; // مهم للهواتف
                 document.getElementById('audios').appendChild(audio);
             }
             audio.srcObject = remoteStream;
             
-            // منطق الكتم البرمجي
+            // كتم الصوت برمجياً حسب المرحلة والدور
             const isNight = document.getElementById('status').innerText.includes("🌙");
             if (isNight) {
                 audio.muted = !myRole.includes("مافيا");
             } else {
                 audio.muted = false;
             }
+            
+            // محاولة التشغيل قسراً للهواتف
+            audio.play().catch(e => console.log("تحتاج ضغطة زر لتشغيل الصوت"));
         }
 
         socket.on('updatePlayers', players => {
