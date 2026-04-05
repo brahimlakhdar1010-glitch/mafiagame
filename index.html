@@ -59,12 +59,18 @@
         const socket = io();
         let stream, room, myRole = "", peers = {}, userMicEnabled = true, systemMicAllowed = true;
         let nightActionUsed = false;
-        let audioContext;
-
+        
+        // تحسين: إضافة IceServers أقوى لضمان الربط خلف جدران الحماية
         const iceConfig = { iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' }
         ] };
+
+        // تحسين للهاتف: تفعيل الصوت عند أي نقرة
+        window.addEventListener('touchstart', () => {
+            document.querySelectorAll('audio').forEach(a => a.play().catch(e => {}));
+        }, { once: false });
 
         async function join() {
             const name = document.getElementById('pName').value;
@@ -73,7 +79,7 @@
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     if (audioContext.state === 'suspended') await audioContext.resume();
 
                     socket.emit('joinRoom', { name, room, password: document.getElementById('rPass').value });
@@ -100,8 +106,6 @@
             if (!systemMicAllowed) return;
             userMicEnabled = !userMicEnabled;
             updateMicHardware();
-            
-            // سطر سحري للهواتف: عند لمس زر الميكروفون، نجبر أي صوت قادم على العمل
             document.querySelectorAll('audio').forEach(a => a.play().catch(e => {}));
         }
 
@@ -142,8 +146,8 @@
                 audio = document.createElement('audio');
                 audio.id = "audio-" + id;
                 audio.autoplay = true;
-                audio.setAttribute('playsinline', ''); // للهاتف
-                audio.setAttribute('webkit-playsinline', ''); // للآيفون
+                audio.playsInline = true;
+                audio.setAttribute('webkit-playsinline', 'true');
                 document.getElementById('audios').appendChild(audio);
             }
             audio.srcObject = remoteStream;
@@ -151,8 +155,10 @@
             const isNight = document.getElementById('status').innerText.includes("🌙");
             audio.muted = (isNight && !myRole.includes("مافيا"));
             
-            // محاولة التشغيل، وإذا فشل الهاتف، سينتظر أول لمسة (Click) على الشاشة
-            audio.play().catch(e => console.log("الهاتف يحظر التشغيل التلقائي"));
+            audio.play().catch(e => {
+                // في حال فشل التشغيل التلقائي، ننتظر تفاعل المستخدم
+                window.addEventListener('click', () => audio.play(), { once: true });
+            });
         }
 
         socket.on('updatePlayers', players => {
@@ -190,6 +196,7 @@
                 btn.style.opacity = "0.5"; btn.innerText = "تم";
             } else {
                 socket.emit('submitVote', { room, targetId: tid });
+                // لا نغلق الزر في النهار للسماح بتغيير التصويت
             }
         }
 
