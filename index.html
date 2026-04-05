@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MAFIA LAKHDAR | FINAL</title>
+    <title>MAFIA LAKHDAR | FIXED</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <style>
@@ -13,8 +13,9 @@
         #chatBox { width: 95vw; max-width: 450px; height: 200px; background: rgba(22, 27, 34, 0.8); border: 1px solid #30363d; border-radius: 15px; overflow-y: auto; padding: 10px; margin-bottom: 10px; }
         .p-card { background: rgba(33, 38, 45, 0.9); border-bottom: 3px solid #ff2e63; padding: 10px; border-radius: 10px; margin: 5px; text-align: center; flex: 1 1 40%; max-width: 150px; font-size: 0.85rem; }
         input { background: #0d1117; border: 1px solid #30363d; color: white; padding: 12px; border-radius: 25px; width: 85vw; max-width: 300px; text-align: center; margin-bottom: 10px; }
-        #joinBtn { background: #238636; color: white; border: none; padding: 15px 50px; border-radius: 30px; font-weight: bold; cursor: pointer; }
+        button#joinBtn { background: #238636; color: white; border: none; padding: 15px 50px; border-radius: 30px; font-weight: bold; cursor: pointer; width: 85vw; max-width: 300px; }
         .mic-active { background: #238636 !important; }
+        .mic-muted { background: #da3633 !important; }
         .mic-disabled { background: #30363d !important; opacity: 0.5; }
         .btn-act { background: #ff2e63; color: white; border: none; padding: 8px; border-radius: 15px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
     </style>
@@ -48,7 +49,8 @@
     <script>
         const socket = io();
         let stream, room, myRole, peers = {}, userMicEnabled = true, systemMicAllowed = true;
-        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+        let nightActionUsed = false;
+        const iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         async function join() {
             const name = document.getElementById('pName').value;
@@ -59,28 +61,34 @@
                     socket.emit('joinRoom', { name, room, password: document.getElementById('rPass').value });
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'flex';
-                } catch(e) { alert("يجب السماح بالميكروفون!"); }
+                } catch(e) { alert("يرجى السماح بالوصول للميكروفون!"); }
             }
         }
 
         socket.on('audioControl', d => {
             systemMicAllowed = d.allowedBySystem;
-            if (stream) stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
-            const btn = document.getElementById('micBtn');
-            btn.innerText = systemMicAllowed ? (userMicEnabled ? "🎤 ميكروفون: يعمل" : "🔇 ميكروفون: مقفل") : "🚫 الليل: صمت";
-            btn.className = systemMicAllowed ? (userMicEnabled ? "mic-active" : "mic-muted") : "mic-disabled";
+            updateMicHardware();
         });
+
+        function updateMicHardware() {
+            const btn = document.getElementById('micBtn');
+            if (stream) stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
+            if (!systemMicAllowed) { btn.innerText = "🔇 الليل: صمت مطبق"; btn.className = "mic-disabled"; }
+            else if (!userMicEnabled) { btn.innerText = "🔇 ميكروفونك: مقفل"; btn.className = "mic-muted"; }
+            else { btn.innerText = "🎤 ميكروفونك: يعمل"; btn.className = "mic-active"; }
+        }
 
         function toggleMic() {
             if (!systemMicAllowed) return;
             userMicEnabled = !userMicEnabled;
-            if (stream) stream.getAudioTracks()[0].enabled = userMicEnabled;
             updateMicHardware();
         }
 
         socket.on('phaseChange', d => {
+            if(d.phase === "night") nightActionUsed = false;
             document.getElementById('status').innerText = (d.phase === "night" ? "🌙 " : "☀️ ") + d.msg;
-            // تصفير الميكروفونات عند كل تحول لضمان عدم حدوث تعليق في الصوت
+            
+            // تنظيف قنوات الصوت القديمة عند كل تحول مرحلة لضمان بداية فريش
             Object.values(peers).forEach(p => p.destroy());
             peers = {};
             document.getElementById('audios').innerHTML = "";
@@ -113,29 +121,34 @@
                 document.getElementById('audios').appendChild(audio);
             }
             audio.srcObject = remoteStream;
-            // الميزة الأهم: إلغاء الكتم فوراً إذا كان نهاراً أو إذا كان المتحدث مافيا وأنت مافيا
+            
+            // منطق الكتم: في النهار (false) الكل يسمع. في الليل (true) المافيا فقط يسمعون بعضهم.
             const isNight = document.getElementById('status').innerText.includes("🌙");
-            audio.muted = (isNight && (!myRole || !myRole.includes("مافيا")));
+            audio.muted = (isNight && !myRole.includes("مافيا"));
         }
 
         socket.on('updatePlayers', players => {
             const list = document.getElementById('player-list'); list.innerHTML = "";
+            const isNight = document.getElementById('status').innerText.includes("🌙");
             const me = players.find(p => p.id === socket.id);
             players.forEach(p => {
                 const div = document.createElement('div'); div.className = "p-card";
                 div.innerHTML = `${p.isSpectator ? "👁️ " : ""}${p.name} ${p.id === socket.id ? "(أنت)" : ""}<br>`;
-                if (me?.isAlive && !me.isSpectator && p.id !== socket.id && p.isAlive) {
-                    div.innerHTML += `<button class="btn-act" onclick="act('${p.id}')">اختيار</button>`;
+                if (me?.isAlive && !me.isSpectator && p.id !== socket.id && p.isAlive && !p.isSpectator) {
+                    div.innerHTML += `<button class="btn-act" onclick="act('${p.id}', this)">اختيار</button>`;
                 }
                 list.appendChild(div);
             });
         });
 
-        function act(tid) {
+        function act(tid, btn) {
             const isNight = document.getElementById('status').innerText.includes("🌙");
             if (isNight) {
+                if(nightActionUsed) return;
                 let type = myRole.includes("مافيا") ? "kill" : (myRole.includes("طبيب") ? "save" : "check");
                 socket.emit('nightAction', { room, targetId: tid, type });
+                nightActionUsed = true;
+                btn.style.opacity = "0.5"; btn.innerText = "تم";
             } else {
                 socket.emit('submitVote', { room, targetId: tid });
             }
@@ -144,10 +157,10 @@
         socket.on('timerUpdate', t => document.getElementById('timer-box').innerText = t);
         socket.on('assignRole', r => { myRole = r; document.getElementById('role').innerText = "دورك: " + r; });
         socket.on('newMessage', d => {
+            const box = document.getElementById('chatBox');
             const div = document.createElement('div');
             div.innerHTML = `<b style="color:#ff2e63">${d.sender}:</b> ${d.text}`;
-            document.getElementById('chatBox').appendChild(div);
-            document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+            box.appendChild(div); box.scrollTop = box.scrollHeight;
         });
 
         function send() { 
