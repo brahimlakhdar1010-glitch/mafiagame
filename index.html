@@ -53,18 +53,15 @@
         <button id="micBtn" onclick="toggleMic()" class="mic-active" style="width:95vw; max-width:450px; margin-top:10px; color:white; border:none; padding:12px; border-radius:12px; font-weight:bold;">🎤 ميكروفون: يعمل</button>
     </div>
 
-    <div id="audios" style="display:none;"></div>
-
-    <script>
+    <div id="audios"></div> <script>
         const socket = io();
         let stream, room, myRole = "", peers = {}, userMicEnabled = true, systemMicAllowed = true;
         let nightActionUsed = false;
-        
-        // خوادم الجليد (ICE) ضرورية جداً للصوت عبر الإنترنت
+        let audioContext;
+
         const iceConfig = { iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' }
         ] };
 
         async function join() {
@@ -72,22 +69,16 @@
             room = document.getElementById('rName').value;
             if (name && room) {
                 try {
-                    // طلب الميكروفون
                     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     
-                    // إصلاح مشكلة المتصفحات المحمولة: تشغيل السياق الصوتي بعد ضغطة زر
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    const audioCtx = new AudioContext();
-                    if (audioCtx.state === 'suspended') {
-                        await audioCtx.resume();
-                    }
+                    // تفعيل الصوت للمتصفحات المحمولة
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioContext.state === 'suspended') await audioContext.resume();
 
                     socket.emit('joinRoom', { name, room, password: document.getElementById('rPass').value });
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('game-screen').style.display = 'flex';
-                } catch(e) { 
-                    alert("يجب السماح للميكروفون للعب! تأكد من إعدادات المتصفح."); 
-                }
+                } catch(e) { alert("يرجى السماح بالميكروفون!"); }
             }
         }
 
@@ -98,19 +89,10 @@
 
         function updateMicHardware() {
             const btn = document.getElementById('micBtn');
-            if (stream) {
-                stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
-            }
-            if (!systemMicAllowed) { 
-                btn.innerText = "🔇 الليل: صمت مطبق"; 
-                btn.className = "mic-disabled"; 
-            } else if (!userMicEnabled) { 
-                btn.innerText = "🔇 ميكروفونك: مقفل"; 
-                btn.className = "mic-muted"; 
-            } else { 
-                btn.innerText = "🎤 ميكروفونك: يعمل"; 
-                btn.className = "mic-active"; 
-            }
+            if (stream) stream.getAudioTracks()[0].enabled = (systemMicAllowed && userMicEnabled);
+            if (!systemMicAllowed) { btn.innerText = "🔇 الليل: صمت مطبق"; btn.className = "mic-disabled"; }
+            else if (!userMicEnabled) { btn.innerText = "🔇 ميكروفونك: مقفل"; btn.className = "mic-muted"; }
+            else { btn.innerText = "🎤 ميكروفونك: يعمل"; btn.className = "mic-active"; }
         }
 
         function toggleMic() {
@@ -123,9 +105,9 @@
             if(d.phase === "night") nightActionUsed = false;
             document.getElementById('status').innerText = (d.phase === "night" ? "🌙 " : "☀️ ") + d.msg;
             
-            // تنظيف الاتصالات لضمان جودة الصوت
+            // تنظيف القنوات القديمة عند كل تغيير مرحلة لضمان عدم حدوث تداخل
             Object.keys(peers).forEach(id => {
-                if(peers[id]) peers[id].destroy();
+                peers[id].destroy();
                 delete peers[id];
             });
             document.getElementById('audios').innerHTML = "";
@@ -157,21 +139,19 @@
                 audio = document.createElement('audio');
                 audio.id = "audio-" + id;
                 audio.autoplay = true;
-                audio.playsInline = true; // مهم للهواتف
+                audio.playsInline = true; // ضروري للآيفون
                 document.getElementById('audios').appendChild(audio);
             }
             audio.srcObject = remoteStream;
             
-            // كتم الصوت برمجياً حسب المرحلة والدور
+            // كتم الصوت برمجياً بناءً على قوانين اللعبة
             const isNight = document.getElementById('status').innerText.includes("🌙");
             if (isNight) {
+                // في الليل، فقط المافيا يسمعون بعضهم
                 audio.muted = !myRole.includes("مافيا");
             } else {
                 audio.muted = false;
             }
-            
-            // محاولة التشغيل قسراً للهواتف
-            audio.play().catch(e => console.log("تحتاج ضغطة زر لتشغيل الصوت"));
         }
 
         socket.on('updatePlayers', players => {
