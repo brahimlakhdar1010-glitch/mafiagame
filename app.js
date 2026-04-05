@@ -37,11 +37,10 @@ io.on('connection', (socket) => {
         const rd = rooms[room];
         if (rd && rd.phase === "day") {
             const voter = rd.players.find(p => p.id === socket.id);
-            const target = rd.players.find(p => p.id === targetId);
-            if (voter?.isAlive && !voter.isSpectator && target?.isAlive) {
-                // تعديل: السماح بتغيير التصويت (القيمة الجديدة تمسح القديمة تلقائياً في Object)
-                rd.votes[socket.id] = targetId; 
-                io.to(room).emit('newMessage', { sender: "النظام", text: `📢 ${voter.name} غيّر صوته ضد ${target.name}` });
+            if (voter?.isAlive) {
+                rd.votes[socket.id] = targetId; // تحديث التصويت للسماح بتغييره
+                const target = rd.players.find(p => p.id === targetId);
+                io.to(room).emit('newMessage', { sender: "النظام", text: `📢 ${voter.name} صوّت ضد ${target.name}` });
             }
         }
     });
@@ -53,8 +52,12 @@ io.on('connection', (socket) => {
         if (!actor?.isAlive) return;
 
         if (type === "kill" && actor.role.includes("مافيا")) rd.nightActions.killed = targetId;
-        // تعديل: الطبيب يحمي أي شخص (لا يوجد شرط يمنعه من اختيار نفسه)
-        if (type === "save" && actor.role.includes("طبيب")) rd.nightActions.saved = targetId;
+        
+        // إصلاح الطبيب: يمكنه حماية أي targetId يتم إرساله (نفسه أو غيره)
+        if (type === "save" && actor.role.includes("طبيب")) {
+            rd.nightActions.saved = targetId;
+        }
+
         if (type === "check" && actor.role.includes("شرطة")) {
             const target = rd.players.find(p => p.id === targetId);
             socket.emit('newMessage', { sender: "النظام", text: `🔍 نتيجة التحقيق: ${target.name} هو ${target?.role?.includes("مافيا") ? "مافيا 🕵️" : "مواطن ✅"}` });
@@ -124,10 +127,11 @@ function startPhase(room, phase) {
         io.to(p.id).emit('audioControl', { allowedBySystem: canTalk });
     });
 
-    // تحسين الصوت: إرسال أمر الربط فوراً وبدون تأخير طويل
-    rd.players.forEach(p => {
-        if (p.isAlive) io.to(room).emit('user-connected', p.id);
-    });
+    setTimeout(() => {
+        rd.players.forEach(p => {
+            if (p.isAlive) io.to(room).emit('user-connected', p.id);
+        });
+    }, 1000);
 
     clearInterval(rd.timerInterval);
     rd.timerInterval = setInterval(() => {
@@ -146,8 +150,6 @@ function endNight(room) {
     if (killed && killed !== saved) {
         const p = rd.players.find(x => x.id === killed);
         if (p) { p.isAlive = false; p.isSpectator = true; io.to(room).emit('newMessage', { sender: "النظام", text: `💀 مات ${p.name} الليلة.` }); }
-    } else if (killed && killed === saved) {
-        io.to(room).emit('newMessage', { sender: "النظام", text: "🏥 حاول القاتل تنفيذ جريمته لكن الطبيب كان هناك!" });
     } else {
         io.to(room).emit('newMessage', { sender: "النظام", text: "🌅 مر الليل بسلام." });
     }
@@ -159,7 +161,7 @@ function endDay(room) {
     const rd = rooms[room];
     let counts = {};
     Object.values(rd.votes).forEach(id => counts[id] = (counts[id] || 0) + 1);
-    let victim = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b, null);
+    let victim = Object.keys(counts).reduce((a, b) => (counts[a] || 0) > (counts[b] || 0) ? a : b, null);
     if (victim) {
         const p = rd.players.find(x => x.id === victim);
         if (p) { p.isAlive = false; p.isSpectator = true; io.to(room).emit('newMessage', { sender: "النظام", text: `⚖️ تم إعدام ${p.name}.` }); }
