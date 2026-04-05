@@ -1,11 +1,13 @@
 {
-  "name": "mafia-lakhdar-final",
-  "version": "1.6.0",
+  "name": "mafialakhdar",
+  "version": "1.0.0",
+  "description": "Multiplayer Mafia Game",
   "main": "app.js",
-  "scripts": { "start": "node app.js" },
+  "scripts": {
+    "start": "node app.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
-    "http": "^0.0.1-security",
     "socket.io": "^4.7.2"
   }
 }
