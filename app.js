@@ -14,7 +14,6 @@ app.use(express.static(__dirname + '/'));
 let rooms = {};
 
 io.on('connection', (socket) => {
-    // نظام دخول الغرف بكلمة سر
     socket.on('join-room', (data) => {
         const roomID = String(data.room);
         const { user, pass } = data;
@@ -22,13 +21,13 @@ io.on('connection', (socket) => {
         if (!rooms[roomID]) {
             rooms[roomID] = { 
                 password: pass, players: [], phase: 'waiting', 
-                timer: 30, votes: {}, nightActions: { kill: null, save: null } 
+                timer: 30, interval: null, nightActions: { kill: null, save: null } 
             };
         }
 
         if (rooms[roomID].password !== pass) return socket.emit('error-msg', 'كلمة السر خاطئة!');
         
-        const player = { id: socket.id, name: user, role: 'citizen', alive: true, voted: false };
+        const player = { id: socket.id, name: user, role: 'citizen', alive: true };
         rooms[roomID].players.push(player);
         socket.join(roomID);
 
@@ -40,23 +39,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // نظام الميكروفون والصوت
+    // إصلاح بث الصوت: إرسال لكل الغرفة ما عدا المرسل
     socket.on('voice-data', (data) => {
-        const roomID = String(data.room);
-        socket.to(roomID).emit('audio-stream', { stream: data.stream, sender: socket.id });
+        socket.to(String(data.room)).emit('audio-stream', data.stream);
     });
 
-    // نظام الدردشة
-    socket.on('send-chat', (data) => {
-        const room = rooms[String(data.room)];
-        if (!room) return;
-        const p = room.players.find(pl => pl.id === socket.id);
-        if (p && p.alive) {
-            io.to(String(data.room)).emit('chat-msg', { user: p.name, msg: data.msg });
-        }
-    });
-
-    // تنفيذ الحركات (قتل، حماية، تحقيق، تصويت)
     socket.on('action', (data) => {
         const room = rooms[String(data.room)];
         const p = room.players.find(pl => pl.id === socket.id);
@@ -64,27 +51,48 @@ io.on('connection', (socket) => {
 
         if (room.phase === 'night') {
             if (p.role === 'mafia') room.nightActions.kill = data.target;
-            if (p.role === 'doctor') room.nightActions.save = data.target;
+            if (p.role === 'doctor') room.nightActions.save = data.target; // هنا يمكنه حماية نفسه
             if (p.role === 'detective') {
                 const target = room.players.find(pl => pl.id === data.target);
-                socket.emit('sys-msg', `نتائج التحقيق: ${target.name} هو ${target.role === 'mafia' ? 'مافيا 👺' : 'مواطن 👤'}`);
+                socket.emit('sys-msg', `التحقيق: ${target.name} هو ${target.role === 'mafia' ? 'مافيا 👺' : 'مواطن 👤'}`);
             }
-        } else if (room.phase === 'day') {
-            room.votes[data.target] = (room.votes[data.target] || 0) + 1;
-            p.voted = true;
         }
     });
 });
+
+function checkWin(roomID) {
+    const room = rooms[roomID];
+    const alives = room.players.filter(p => p.alive);
+    const mafias = alives.filter(p => p.role === 'mafia').length;
+    const citizens = alives.length - mafias;
+
+    if (mafias === 0) {
+        io.to(roomID).emit('sys-msg', "🎉 انتهت اللعبة: فاز المواطنون وقضينا على المافيا!");
+        resetRoom(roomID);
+        return true;
+    } else if (mafias >= citizens) {
+        io.to(roomID).emit('sys-msg', "💀 انتهت اللعبة: فازت المافيا وسيطرت على المدينة!");
+        resetRoom(roomID);
+        return true;
+    }
+    return false;
+}
+
+function resetRoom(roomID) {
+    if (rooms[roomID].interval) clearInterval(rooms[roomID].interval);
+    rooms[roomID].phase = 'waiting';
+    rooms[roomID].players.forEach(p => { p.alive = true; });
+}
 
 function startCountdown(roomID) {
     const room = rooms[roomID];
     room.phase = 'starting';
     let timeLeft = 30;
-    const interval = setInterval(() => {
+    room.interval = setInterval(() => {
         timeLeft--;
         io.to(roomID).emit('time-update', timeLeft);
         if (timeLeft <= 0) {
-            clearInterval(interval);
+            clearInterval(room.interval);
             assignRoles(roomID);
         }
     }, 1000);
@@ -107,17 +115,18 @@ function assignRoles(roomID) {
 }
 
 function startNight(roomID) {
+    if (checkWin(roomID)) return;
     const room = rooms[roomID];
     room.phase = 'night';
     room.nightActions = { kill: null, save: null };
     io.to(roomID).emit('phase-change', { phase: 'night', players: room.players.filter(p => p.alive) });
     
     let timeLeft = 30;
-    const interval = setInterval(() => {
+    room.interval = setInterval(() => {
         timeLeft--;
         io.to(roomID).emit('time-update', timeLeft);
         if (timeLeft <= 0) {
-            clearInterval(interval);
+            clearInterval(room.interval);
             processNight(roomID);
         }
     }, 1000);
@@ -128,30 +137,31 @@ function processNight(roomID) {
     let killedID = room.nightActions.kill;
     let savedID = room.nightActions.save;
 
-    if (killedID && killedID !== savedID) {
+    if (killedID && killedID === savedID) {
+        const savedName = room.players.find(p => p.id === savedID).name;
+        io.to(roomID).emit('sys-msg', `🛡️ الطبيب كان بالمرصاد! حاولوا قتل ${savedName} ولكن تم إنقاذه.`);
+    } else if (killedID) {
         const victim = room.players.find(p => p.id === killedID);
         if (victim) victim.alive = false;
-        io.to(roomID).emit('sys-msg', `استيقظت المدينة على فاجعة.. تم اغتيال ${victim ? victim.name : 'أحدهم'}`);
+        io.to(roomID).emit('sys-msg', `🚨 فاجعة! تم اغتيال المواطن ${victim.name}.`);
     } else {
-        io.to(roomID).emit('sys-msg', `ليلة هادئة.. لم يمت أحد!`);
+        io.to(roomID).emit('sys-msg', `🌙 ليلة هادئة بسلام.. لم يمت أحد.`);
     }
-    startDay(roomID);
+    
+    if (!checkWin(roomID)) startDay(roomID);
 }
 
 function startDay(roomID) {
     const room = rooms[roomID];
     room.phase = 'day';
-    room.votes = {};
-    room.players.forEach(p => p.voted = false);
     io.to(roomID).emit('phase-change', { phase: 'day', players: room.players.filter(p => p.alive) });
     
     let timeLeft = 240;
-    const interval = setInterval(() => {
+    room.interval = setInterval(() => {
         timeLeft--;
         io.to(roomID).emit('time-update', timeLeft);
         if (timeLeft <= 0) {
-            clearInterval(interval);
-            // منطق الإعدام بناءً على التصويت ثم العودة لليل...
+            clearInterval(room.interval);
             startNight(roomID);
         }
     }, 1000);
