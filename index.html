@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAFIALAKHDAR | الإصدار المطور</title>
+    <title>MAFIALAKHDAR | النهائية</title>
     <style>
         body { font-family: 'Cairo', sans-serif; background: #0f0f0f; color: white; margin: 0; padding: 10px; }
         .card { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 1px solid #333; max-width: 500px; margin: auto; }
@@ -11,7 +11,7 @@
         input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #444; background: #000; color: white; box-sizing: border-box; }
         button { width: 100%; padding: 12px; background: #e74c3c; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; }
         .rules { font-size: 13px; color: #aaa; text-align: right; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
-        #chat { height: 250px; overflow-y: auto; background: #000; padding: 10px; border-radius: 8px; margin: 10px 0; }
+        #chat { height: 250px; overflow-y: auto; background: #000; padding: 10px; border-radius: 8px; margin: 10px 0; border: 1px solid #222; }
         .timer { font-size: 30px; color: #f1c40f; text-align: center; font-weight: bold; }
         .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .btn-action { background: #34495e; font-size: 12px; margin-top:5px; }
@@ -22,11 +22,10 @@
 <div id="login-screen" class="card">
     <h2>MAFIALAKHDAR 🕵️‍♂️</h2>
     <div class="rules">
-        <b>قوانين اللعبة:</b><br>
-        • الطبيب يحمي (حتى نفسه).<br>
-        • المافيا تقتل في ليل اللاعبين.<br>
-        • المحقق يكشف الهويات.<br>
-        • الفوز يُعلن فوراً عند القضاء على المافيا أو تساويهم مع المواطنين.
+        • <b>الليل:</b> المافيا تقتل، الطبيب يحمي، المحقق يكشف.<br>
+        • <b>النهار:</b> مناقشة بالميكروفون وتصويت بالأغلبية.<br>
+        • الميت لا يمكنه الكلام أو التصويت.<br>
+        • تفتح الغرفة عند وجود 4 لاعبين.
     </div>
     <input type="text" id="user" placeholder="اسمك">
     <input type="text" id="room" placeholder="رقم الغرفة">
@@ -35,8 +34,8 @@
 </div>
 
 <div id="game-area" class="card hidden">
-    <div id="role-tag" style="color: #f1c40f; font-weight: bold; text-align: center; font-size: 20px;">انتظار...</div>
-    <div id="timer" class="timer">00:30</div>
+    <div id="role-tag" style="color: #f1c40f; font-weight: bold; text-align: center; font-size: 18px;">انتظار...</div>
+    <div id="timer" class="timer">0:30</div>
     <div id="chat"></div>
     <div id="actions" class="action-grid"></div>
     <hr>
@@ -44,7 +43,7 @@
         <input type="text" id="msg" placeholder="اكتب رسالة...">
         <button onclick="sendMsg()" style="width: 80px;">إرسال</button>
     </div>
-    <button id="mic-btn" onclick="toggleMic()" style="background: #27ae60; margin-top: 10px;">🎤 ميكروفون: مغلق</button>
+    <button id="mic-btn" onclick="toggleMic()" style="background: #27ae60; margin-top: 10px;">🎤 الميكروفون: مغلق</button>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -73,6 +72,14 @@
         document.getElementById('role-tag').innerText = "دورك: " + (roles[role] || role);
     });
 
+    socket.on('is-dead', () => {
+        isAlive = false;
+        document.getElementById('msg').disabled = true;
+        document.getElementById('mic-btn').disabled = true;
+        document.getElementById('role-tag').innerText += " (أنت ميت 💀)";
+        alert("انتهى دورك.. لقد تم إقصاؤك!");
+    });
+
     socket.on('time-update', (t) => {
         let m = Math.floor(t / 60);
         let s = t % 60;
@@ -81,13 +88,13 @@
 
     socket.on('sys-msg', (m) => {
         const c = document.getElementById('chat');
-        c.innerHTML += `<p style="color: #2ecc71; margin: 5px 0;">📢 ${m}</p>`;
+        c.innerHTML += `<p style="color: #2ecc71; margin: 4px 0;">📢 ${m}</p>`;
         c.scrollTop = c.scrollHeight;
     });
 
     socket.on('chat-msg', (d) => {
         const c = document.getElementById('chat');
-        c.innerHTML += `<p style="margin: 5px 0;"><b>${d.user}:</b> ${d.msg}</p>`;
+        c.innerHTML += `<p style="margin: 4px 0;"><b>${d.user}:</b> ${d.msg}</p>`;
         c.scrollTop = c.scrollHeight;
     });
 
@@ -96,14 +103,14 @@
         area.innerHTML = "";
         if (isAlive) {
             data.players.forEach(p => {
-                // الطبيب يحمي نفسه اوالآخرين، 
+                // الطبيب يرى نفسه في الليل، البقية يرون الآخرين فقط
                 if ((data.phase === 'night' && myRole === 'doctor') || p.id !== socket.id) {
                     const btn = document.createElement('button');
                     btn.className = "btn-action";
-                    btn.innerText = (data.phase === 'night' ? "قدرة على: " : "تصويت ضد: ") + p.name;
+                    btn.innerText = (data.phase === 'night' ? "استخدام القدرة: " : "تصويت ضد: ") + p.name;
                     btn.onclick = () => {
                         socket.emit('action', { room: myRoom, target: p.id });
-                        area.innerHTML = "<span style='color:#aaa'>تم تسجيل قرارك</span>";
+                        area.innerHTML = "<span style='color:#777'>تم الاختيار</span>";
                     };
                     area.appendChild(btn);
                 }
@@ -125,9 +132,11 @@
                 micActive = true;
                 btn.innerText = "🎤 الميكروفون: يعمل";
                 btn.style.background = "#e67e22";
-            } catch (err) { alert("افتح الميكروفون تلقائيا!"); }
+                window.localStream = stream;
+            } catch (err) { alert("افتح الميكروفون!"); }
         } else {
             mediaRecorder.stop();
+            window.localStream.getTracks().forEach(t => t.stop());
             micActive = false;
             btn.innerText = "🎤 الميكروفون: مغلق";
             btn.style.background = "#27ae60";
@@ -136,8 +145,7 @@
 
     socket.on('audio-stream', (data) => {
         const blob = new Blob([data], { type: 'audio/webm' });
-        const audio = new Audio(window.URL.createObjectURL(blob));
-        audio.play().catch(() => {});
+        new Audio(window.URL.createObjectURL(blob)).play().catch(()=>{});
     });
 
     function sendMsg() {
