@@ -22,13 +22,13 @@ io.on('connection', (socket) => {
             rooms[roomID] = { 
                 password: pass, players: [], phase: 'waiting', 
                 timer: 30, interval: null, nightActions: { kill: null, save: null },
-                votes: {} // لإضافة نظام التصويت
+                votes: {} 
             };
         }
 
-        // خاصية: منع الدخول إذا بدأت اللعبة
+        // قفل الغرفة إذا بدأت اللعبة
         if (rooms[roomID].phase !== 'waiting') {
-            return socket.emit('sys-msg', 'عذراً، اللعبة بدأت بالفعل في هذه الغرفة!');
+            return socket.emit('sys-msg', '⚠️ اللعبة بدأت بالفعل، لا يمكنك الدخول الآن.');
         }
 
         if (rooms[roomID].password !== pass) return socket.emit('error-msg', 'كلمة السر خاطئة!');
@@ -38,7 +38,7 @@ io.on('connection', (socket) => {
         socket.join(roomID);
 
         socket.emit('joined', { room: roomID });
-        io.to(roomID).emit('sys-msg', `${user} دخل اللعبة.`);
+        io.to(roomID).emit('sys-msg', `${user} انضم للمدينة.`);
 
         if (rooms[roomID].players.length >= 4 && rooms[roomID].phase === 'waiting') {
             startCountdown(roomID);
@@ -47,6 +47,16 @@ io.on('connection', (socket) => {
 
     socket.on('voice-data', (data) => {
         socket.to(String(data.room)).emit('audio-stream', data.stream);
+    });
+
+    socket.on('send-chat', (data) => {
+        const room = rooms[String(data.room)];
+        if (room) {
+            const p = room.players.find(pl => pl.id === socket.id);
+            if (p && p.alive) { 
+                io.to(String(data.room)).emit('chat-msg', { user: p.name, msg: data.msg });
+            }
+        }
     });
 
     socket.on('action', (data) => {
@@ -59,22 +69,10 @@ io.on('connection', (socket) => {
             if (p.role === 'doctor') room.nightActions.save = data.target;
             if (p.role === 'detective') {
                 const target = room.players.find(pl => pl.id === data.target);
-                socket.emit('sys-msg', `التحقيق: ${target.name} هو ${target.role === 'mafia' ? 'مافيا 👺' : 'مواطن 👤'}`);
+                socket.emit('sys-msg', `🔍 كشف الهوية: ${target.name} هو ${target.role === 'mafia' ? 'مافيا 👺' : 'مواطن 👤'}`);
             }
-        } 
-        // خاصية: تسجيل التصويت في النهار
-        else if (room.phase === 'day') {
+        } else if (room.phase === 'day') {
             room.votes[data.target] = (room.votes[data.target] || 0) + 1;
-        }
-    });
-
-    socket.on('send-chat', (data) => {
-        const room = rooms[String(data.room)];
-        if (room) {
-            const p = room.players.find(pl => pl.id === socket.id);
-            if (p && p.alive) { // الشخص الحي فقط يتحدث
-                io.to(String(data.room)).emit('chat-msg', { user: p.name, msg: data.msg });
-            }
         }
     });
 });
@@ -86,11 +84,11 @@ function checkWin(roomID) {
     const citizens = alives.length - mafias;
 
     if (mafias === 0) {
-        io.to(roomID).emit('sys-msg', "🎉 انتهت اللعبة: فاز المواطنون وقضينا على المافيا!");
+        io.to(roomID).emit('sys-msg', "🎉 مبروك! فاز المواطنون وتم القضاء على المافيا!");
         resetRoom(roomID);
         return true;
     } else if (mafias >= citizens) {
-        io.to(roomID).emit('sys-msg', "💀 انتهت اللعبة: فازت المافيا وسيطرت على المدينة!");
+        io.to(roomID).emit('sys-msg', "💀 خسرتم! سيطرت المافيا على المدينة بالكامل.");
         resetRoom(roomID);
         return true;
     }
@@ -100,7 +98,7 @@ function checkWin(roomID) {
 function resetRoom(roomID) {
     if (rooms[roomID].interval) clearInterval(rooms[roomID].interval);
     rooms[roomID].phase = 'waiting';
-    rooms[roomID].players.forEach(p => { p.alive = true; });
+    rooms[roomID].players.forEach(p => p.alive = true);
 }
 
 function startCountdown(roomID) {
@@ -138,8 +136,7 @@ function startNight(roomID) {
     const room = rooms[roomID];
     room.phase = 'night';
     room.nightActions = { kill: null, save: null };
-    // توضيح أن الليل قد حل
-    io.to(roomID).emit('sys-msg', "🌑 حلّ الظلام.. أيها الأصحاب القدرات استعدوا!");
+    io.to(roomID).emit('sys-msg', "🌑 حل الليل.. استيقظت المافيا، الطبيب، والمحقق.");
     io.to(roomID).emit('phase-change', { phase: 'night', players: room.players.filter(p => p.alive) });
     
     let timeLeft = 30;
@@ -160,16 +157,16 @@ function processNight(roomID) {
 
     if (killedID && killedID === savedID) {
         const savedName = room.players.find(p => p.id === savedID).name;
-        io.to(roomID).emit('sys-msg', `🛡️ الطبيب كان بالمرصاد! حاولوا قتل ${savedName} ولكن تم إنقاذه.`);
+        io.to(roomID).emit('sys-msg', `🛡️ الطبيب بطل! تم إنقاذ ${savedName} من الموت.`);
     } else if (killedID) {
         const victim = room.players.find(p => p.id === killedID);
         if (victim) {
             victim.alive = false;
-            io.to(victim.id).emit('is-dead'); // إخبار اللاعب أنه مات
+            io.to(victim.id).emit('is-dead');
+            io.to(roomID).emit('sys-msg', `🚨 فاجعة: المافيا قتلت ${victim.name}!`);
         }
-        io.to(roomID).emit('sys-msg', `🚨 فاجعة! تم اغتيال المواطن ${victim ? victim.name : 'مجهول'}.`);
     } else {
-        io.to(roomID).emit('sys-msg', `🌙 ليلة هادئة بسلام.. لم يمت أحد.`);
+        io.to(roomID).emit('sys-msg', "🌙 ليلة هادئة.. لم يمت أحد.");
     }
     
     if (!checkWin(roomID)) startDay(roomID);
@@ -178,8 +175,7 @@ function processNight(roomID) {
 function startDay(roomID) {
     const room = rooms[roomID];
     room.phase = 'day';
-    room.votes = {}; // تصقير الأصوات
-    // توضيح أن النهار قد حل للتصويت
+    room.votes = {};
     io.to(roomID).emit('sys-msg', "☀️ استيقظت المدينة! وقت النقاش والتصويت على المشتبه بهم.");
     io.to(roomID).emit('phase-change', { phase: 'day', players: room.players.filter(p => p.alive) });
     
@@ -189,22 +185,16 @@ function startDay(roomID) {
         io.to(roomID).emit('time-update', timeLeft);
         if (timeLeft <= 0) {
             clearInterval(room.interval);
-            processVoting(roomID); // معالجة التصويت عند انتهاء الوقت
+            processVoting(roomID);
         }
     }, 1000);
 }
 
-// خاصية: معالجة التصويت وإقصاء اللاعب
 function processVoting(roomID) {
     const room = rooms[roomID];
-    let topVoted = null;
-    let maxVotes = 0;
-
+    let topVoted = null, maxVotes = 0;
     for (let id in room.votes) {
-        if (room.votes[id] > maxVotes) {
-            maxVotes = room.votes[id];
-            topVoted = id;
-        }
+        if (room.votes[id] > maxVotes) { maxVotes = room.votes[id]; topVoted = id; }
     }
 
     if (topVoted) {
@@ -212,10 +202,10 @@ function processVoting(roomID) {
         if (victim) {
             victim.alive = false;
             io.to(victim.id).emit('is-dead');
-            io.to(roomID).emit('sys-msg', `⚖️ قررت المدينة إعدام ${victim.name} بالأغلبية!`);
+            io.to(roomID).emit('sys-msg', `⚖️ قرر الشعب إعدام ${victim.name}!`);
         }
     } else {
-        io.to(roomID).emit('sys-msg', "⚖️ لم يتم الاتفاق على إعدام أحد اليوم.");
+        io.to(roomID).emit('sys-msg', "⚖️ لم يتفق أحد على التصويت اليوم.");
     }
 
     if (!checkWin(roomID)) startNight(roomID);
