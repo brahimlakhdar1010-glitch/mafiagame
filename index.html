@@ -24,9 +24,9 @@
     <div class="rules">
         <b>قوانين اللعبة:</b><br>
         • الطبيب يحمي (حتى نفسه).<br>
-        • المافيا تقتل 20% من اللاعبين.<br>
+        • المافيا تقتل في ليل اللاعبين.<br>
         • المحقق يكشف الهويات.<br>
-        • الفوز يُعلن فوراً عند انتهاء المافيا أو تساويهم مع المواطنين.
+        • الفوز يُعلن فوراً عند القضاء على المافيا أو تساويهم مع المواطنين.
     </div>
     <input type="text" id="user" placeholder="اسمك">
     <input type="text" id="room" placeholder="رقم الغرفة">
@@ -96,7 +96,7 @@
         area.innerHTML = "";
         if (isAlive) {
             data.players.forEach(p => {
-                // الطبيب يرى نفسه والآخرين، البقية يرون الآخرين فقط
+                // الطبيب يحمي نفسه اوالآخرين، 
                 if ((data.phase === 'night' && myRole === 'doctor') || p.id !== socket.id) {
                     const btn = document.createElement('button');
                     btn.className = "btn-action";
@@ -125,7 +125,7 @@
                 micActive = true;
                 btn.innerText = "🎤 الميكروفون: يعمل";
                 btn.style.background = "#e67e22";
-            } catch (err) { alert("افتح الميكروفون من الإعدادات!"); }
+            } catch (err) { alert("افتح الميكروفون تلقائيا!"); }
         } else {
             mediaRecorder.stop();
             micActive = false;
