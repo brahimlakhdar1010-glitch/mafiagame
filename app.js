@@ -4,7 +4,10 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: { origin: "*" },
+    transports: ['websocket', 'polling']
+});
 
 app.use(express.static(__dirname + '/'));
 
@@ -12,7 +15,11 @@ let rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('join-room', (data) => {
-        const { room, pass, user } = data;
+        // توحيد نوع البيانات لضمان عدم انعزال الغرف
+        const room = String(data.room); 
+        const pass = data.pass;
+        const user = data.user;
+
         if (!rooms[room]) {
             rooms[room] = { password: pass, players: [], phase: 'waiting', timer: 30, votes: {} };
         }
@@ -23,7 +30,7 @@ io.on('connection', (socket) => {
         socket.join(room);
 
         socket.emit('room-joined', { room });
-        io.to(room).emit('system-msg', `${user} انضم إلى اللعبة.`);
+        io.to(room).emit('system-msg', `${user} انضم إلى اللعبة في الغرفة: ${room}`);
 
         if (rooms[room].players.length >= 4 && rooms[room].phase === 'waiting') {
             startCountdown(room);
@@ -31,15 +38,21 @@ io.on('connection', (socket) => {
     });
 
     socket.on('chat-msg', (data) => {
-        const room = rooms[data.room];
-        const p = room.players.find(pl => pl.id === socket.id);
-        if(p && p.alive) io.to(data.room).emit('system-msg', `${p.name}: ${data.msg}`);
+        const roomID = String(data.room); // تأكيد رقم الغرفة
+        const room = rooms[roomID];
+        if(room) {
+            const p = room.players.find(pl => pl.id === socket.id);
+            if(p && p.alive) io.to(roomID).emit('system-msg', `${p.name}: ${data.msg}`);
+        }
     });
 
     socket.on('cast-vote', (targetID) => {
-        // منطق استقبال التصويت أو القتل
+        // منطق التصويت
     });
 });
+
+// باقي الدوال (startCountdown, assignRoles, startNightPhase, startDayPhase) 
+// تظل كما هي تماماً بدون أي تغيير
 
 function startCountdown(roomID) {
     let timeLeft = 30;
