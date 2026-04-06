@@ -14,103 +14,147 @@ app.use(express.static(__dirname + '/'));
 let rooms = {};
 
 io.on('connection', (socket) => {
+    // نظام دخول الغرف بكلمة سر
     socket.on('join-room', (data) => {
-        // توحيد نوع البيانات لضمان عدم انعزال الغرف
-        const room = String(data.room); 
-        const pass = data.pass;
-        const user = data.user;
+        const roomID = String(data.room);
+        const { user, pass } = data;
 
-        if (!rooms[room]) {
-            rooms[room] = { password: pass, players: [], phase: 'waiting', timer: 30, votes: {} };
+        if (!rooms[roomID]) {
+            rooms[roomID] = { 
+                password: pass, players: [], phase: 'waiting', 
+                timer: 30, votes: {}, nightActions: { kill: null, save: null } 
+            };
         }
-        if (rooms[room].password !== pass) return socket.emit('error', 'كلمة السر خاطئة!');
 
-        const player = { id: socket.id, name: user, role: 'civilian', alive: true };
-        rooms[room].players.push(player);
-        socket.join(room);
+        if (rooms[roomID].password !== pass) return socket.emit('error-msg', 'كلمة السر خاطئة!');
+        
+        const player = { id: socket.id, name: user, role: 'citizen', alive: true, voted: false };
+        rooms[roomID].players.push(player);
+        socket.join(roomID);
 
-        socket.emit('room-joined', { room });
-        io.to(room).emit('system-msg', `${user} انضم إلى اللعبة في الغرفة: ${room}`);
+        socket.emit('joined', { room: roomID });
+        io.to(roomID).emit('sys-msg', `${user} دخل اللعبة.`);
 
-        if (rooms[room].players.length >= 4 && rooms[room].phase === 'waiting') {
-            startCountdown(room);
-        }
-    });
-
-    socket.on('chat-msg', (data) => {
-        const roomID = String(data.room); // تأكيد رقم الغرفة
-        const room = rooms[roomID];
-        if(room) {
-            const p = room.players.find(pl => pl.id === socket.id);
-            if(p && p.alive) io.to(roomID).emit('system-msg', `${p.name}: ${data.msg}`);
+        if (rooms[roomID].players.length >= 4 && rooms[roomID].phase === 'waiting') {
+            startCountdown(roomID);
         }
     });
 
-    socket.on('cast-vote', (targetID) => {
-        // منطق التصويت
+    // نظام الميكروفون والصوت
+    socket.on('voice-data', (data) => {
+        const roomID = String(data.room);
+        socket.to(roomID).emit('audio-stream', { stream: data.stream, sender: socket.id });
+    });
+
+    // نظام الدردشة
+    socket.on('send-chat', (data) => {
+        const room = rooms[String(data.room)];
+        if (!room) return;
+        const p = room.players.find(pl => pl.id === socket.id);
+        if (p && p.alive) {
+            io.to(String(data.room)).emit('chat-msg', { user: p.name, msg: data.msg });
+        }
+    });
+
+    // تنفيذ الحركات (قتل، حماية، تحقيق، تصويت)
+    socket.on('action', (data) => {
+        const room = rooms[String(data.room)];
+        const p = room.players.find(pl => pl.id === socket.id);
+        if (!p || !p.alive) return;
+
+        if (room.phase === 'night') {
+            if (p.role === 'mafia') room.nightActions.kill = data.target;
+            if (p.role === 'doctor') room.nightActions.save = data.target;
+            if (p.role === 'detective') {
+                const target = room.players.find(pl => pl.id === data.target);
+                socket.emit('sys-msg', `نتائج التحقيق: ${target.name} هو ${target.role === 'mafia' ? 'مافيا 👺' : 'مواطن 👤'}`);
+            }
+        } else if (room.phase === 'day') {
+            room.votes[data.target] = (room.votes[data.target] || 0) + 1;
+            p.voted = true;
+        }
     });
 });
 
-// باقي الدوال (startCountdown, assignRoles, startNightPhase, startDayPhase) 
-// تظل كما هي تماماً بدون أي تغيير
-
 function startCountdown(roomID) {
+    const room = rooms[roomID];
+    room.phase = 'starting';
     let timeLeft = 30;
     const interval = setInterval(() => {
         timeLeft--;
-        io.to(roomID).emit('timer-update', timeLeft);
+        io.to(roomID).emit('time-update', timeLeft);
         if (timeLeft <= 0) {
             clearInterval(interval);
             assignRoles(roomID);
-            startNightPhase(roomID);
         }
     }, 1000);
 }
 
 function assignRoles(roomID) {
-    let players = rooms[roomID].players;
-    let mafiaCount = Math.floor(players.length * 0.2) || 1;
-    players.forEach((p, i) => {
-        if(i < mafiaCount) p.role = 'mafia';
-        else if(i === mafiaCount) p.role = 'doctor';
-        else if(i === mafiaCount + 1) p.role = 'detective';
+    const room = rooms[roomID];
+    let players = room.players;
+    let mafiaCount = Math.max(1, Math.floor(players.length * 0.2));
+    let shuffled = [...players].sort(() => 0.5 - Math.random());
+
+    shuffled.forEach((p, i) => {
+        if (i < mafiaCount) p.role = 'mafia';
+        else if (i === mafiaCount) p.role = 'doctor';
+        else if (i === mafiaCount + 1) p.role = 'detective';
+        else p.role = 'citizen';
         io.to(p.id).emit('your-role', p.role);
     });
+    startNight(roomID);
 }
 
-function startNightPhase(roomID) {
+function startNight(roomID) {
     const room = rooms[roomID];
     room.phase = 'night';
-    io.to(roomID).emit('system-msg', "حلّ الظلام على المدينة.. أيها الأشرار استيقظوا.");
-    io.to(roomID).emit('update-players-list', room.players.filter(p => p.alive));
+    room.nightActions = { kill: null, save: null };
+    io.to(roomID).emit('phase-change', { phase: 'night', players: room.players.filter(p => p.alive) });
     
     let timeLeft = 30;
     const interval = setInterval(() => {
         timeLeft--;
-        io.to(roomID).emit('timer-update', timeLeft);
-        if(timeLeft <= 0) {
+        io.to(roomID).emit('time-update', timeLeft);
+        if (timeLeft <= 0) {
             clearInterval(interval);
-            startDayPhase(roomID);
+            processNight(roomID);
         }
     }, 1000);
 }
 
-function startDayPhase(roomID) {
+function processNight(roomID) {
+    const room = rooms[roomID];
+    let killedID = room.nightActions.kill;
+    let savedID = room.nightActions.save;
+
+    if (killedID && killedID !== savedID) {
+        const victim = room.players.find(p => p.id === killedID);
+        if (victim) victim.alive = false;
+        io.to(roomID).emit('sys-msg', `استيقظت المدينة على فاجعة.. تم اغتيال ${victim ? victim.name : 'أحدهم'}`);
+    } else {
+        io.to(roomID).emit('sys-msg', `ليلة هادئة.. لم يمت أحد!`);
+    }
+    startDay(roomID);
+}
+
+function startDay(roomID) {
     const room = rooms[roomID];
     room.phase = 'day';
-    io.to(roomID).emit('system-msg', "استيقظت المدينة.. وقت النقاش والتصويت (4 دقائق).");
-    io.to(roomID).emit('update-players-list', room.players.filter(p => p.alive));
-
-    let timeLeft = 240; 
+    room.votes = {};
+    room.players.forEach(p => p.voted = false);
+    io.to(roomID).emit('phase-change', { phase: 'day', players: room.players.filter(p => p.alive) });
+    
+    let timeLeft = 240;
     const interval = setInterval(() => {
         timeLeft--;
-        io.to(roomID).emit('timer-update', timeLeft);
-        if(timeLeft <= 0) {
+        io.to(roomID).emit('time-update', timeLeft);
+        if (timeLeft <= 0) {
             clearInterval(interval);
-            startNightPhase(roomID);
+            // منطق الإعدام بناءً على التصويت ثم العودة لليل...
+            startNight(roomID);
         }
     }, 1000);
 }
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server on ${PORT}`));
+server.listen(process.env.PORT || 3000);
