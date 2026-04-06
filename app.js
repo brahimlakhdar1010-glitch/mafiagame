@@ -19,81 +19,89 @@ io.on('connection', (socket) => {
         const { user, pass } = data;
 
         if (!rooms[roomID]) {
-            rooms[roomID] = { 
-                password: pass, players: [], phase: 'waiting',
-                timer: 30, interval: null, nightActions: { kill: null, save: null },
-                votes: {}
+            rooms[roomID] = {
+                password: pass,
+                players: [],
+                phase: 'waiting',
+                votes: {},
+                nightActions: {}
             };
-        }
-
-        if (rooms[roomID].phase !== 'waiting') {
-            return socket.emit('sys-msg', '⚠️ اللعبة بدأت بالفعل');
         }
 
         if (rooms[roomID].password !== pass)
             return socket.emit('error-msg', 'كلمة السر خاطئة!');
 
-        const player = { id: socket.id, name: user, role: 'citizen', alive: true };
+        const player = { id: socket.id, name: user, role: 'citizen', alive: true, muted: false };
         rooms[roomID].players.push(player);
         socket.join(roomID);
 
         socket.emit('joined');
-        io.to(roomID).emit('sys-msg', `${user} انضم للمدينة.`);
+        io.to(roomID).emit('sys-msg', `${user} دخل`);
 
         if (rooms[roomID].players.length >= 4 && rooms[roomID].phase === 'waiting') {
-            startCountdown(roomID);
+            assignRoles(roomID);
         }
     });
 
-    // ✅ WebRTC signaling
+    // 🔊 WebRTC Signaling
     socket.on('ready', (data) => {
         socket.to(data.room).emit('ready', { from: socket.id });
     });
 
     socket.on('offer', (data) => {
-        socket.to(data.room).emit('offer', {
-            offer: data.offer,
-            from: socket.id
-        });
+        socket.to(data.room).emit('offer', { offer: data.offer, from: socket.id });
     });
 
     socket.on('answer', (data) => {
-        socket.to(data.room).emit('answer', {
-            answer: data.answer,
-            from: socket.id
-        });
+        socket.to(data.room).emit('answer', { answer: data.answer, from: socket.id });
     });
 
     socket.on('ice-candidate', (data) => {
-        socket.to(data.room).emit('ice-candidate', {
-            candidate: data.candidate,
-            from: socket.id
-        });
+        socket.to(data.room).emit('ice-candidate', { candidate: data.candidate, from: socket.id });
     });
 
-    // باقي الكود ديال اللعبة (ما تبدل والو)
-    socket.on('send-chat', (data) => {
-        const room = rooms[String(data.room)];
-        if (room) {
-            const p = room.players.find(pl => pl.id === socket.id);
-            if (p && p.alive) {
-                io.to(String(data.room)).emit('chat-msg', { user: p.name, msg: data.msg });
-            }
+    socket.on('toggle-mute', (data) => {
+        const room = rooms[data.room];
+        const player = room.players.find(p => p.id === socket.id);
+        if (player) {
+            player.muted = !player.muted;
         }
     });
 
-    socket.on('action', (data) => {
-        const room = rooms[String(data.room)];
-        const p = room.players.find(pl => pl.id === socket.id);
-        if (!p || !p.alive) return;
-
-        if (room.phase === 'night') {
-            if (p.role === 'mafia') room.nightActions.kill = data.target;
-            if (p.role === 'doctor') room.nightActions.save = data.target;
-        } else if (room.phase === 'day') {
-            room.votes[data.target] = (room.votes[data.target] || 0) + 1;
+    socket.on('disconnect', () => {
+        for (let roomID in rooms) {
+            rooms[roomID].players = rooms[roomID].players.filter(p => p.id !== socket.id);
         }
     });
 });
 
-server.listen(process.env.PORT || 3000);
+function assignRoles(roomID) {
+    const room = rooms[roomID];
+    const players = room.players;
+
+    players[0].role = 'mafia';
+
+    players.forEach(p => {
+        io.to(p.id).emit('your-role', p.role);
+    });
+
+    startDay(roomID);
+}
+
+function startDay(roomID) {
+    const room = rooms[roomID];
+    room.phase = 'day';
+    io.to(roomID).emit('phase-change', { phase: 'day' });
+
+    setTimeout(() => startNight(roomID), 30000);
+}
+
+function startNight(roomID) {
+    const room = rooms[roomID];
+    room.phase = 'night';
+    io.to(roomID).emit('phase-change', { phase: 'night' });
+
+    setTimeout(() => startDay(roomID), 20000);
+}
+
+server.listen(3000);
