@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAFIALAKHDAR | العالمية</title>
+    <title>MAFIALAKHDAR | الإصدار المطور</title>
     <style>
         body { font-family: 'Cairo', sans-serif; background: #0f0f0f; color: white; margin: 0; padding: 10px; }
         .card { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 1px solid #333; max-width: 500px; margin: auto; }
@@ -14,8 +14,7 @@
         #chat { height: 250px; overflow-y: auto; background: #000; padding: 10px; border-radius: 8px; margin: 10px 0; }
         .timer { font-size: 30px; color: #f1c40f; text-align: center; font-weight: bold; }
         .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .btn-action { background: #34495e; font-size: 12px; }
-        .night-mode { background: #0c0c20 !important; }
+        .btn-action { background: #34495e; font-size: 12px; margin-top:5px; }
     </style>
 </head>
 <body>
@@ -23,27 +22,26 @@
 <div id="login-screen" class="card">
     <h2>MAFIALAKHDAR 🕵️‍♂️</h2>
     <div class="rules">
-        <b>طريقة الدخول والقوانين:</b><br>
-        1. أدخل اسمك ورقم غرفة موحد مع أصدقائك وكلمة سر.<br>
-        2. <b>المافيا:</b> يقتلون في الليل.<br>
-        3. <b>الطبيب:</b> يحمي شخصاً واحداً.<br>
-        4. <b>المحقق:</b> يكشف هوية لاعب واحد.<br>
-        5. <b>النهار:</b> مناقشة صوتية وتصويت لإخراج المافيا.
+        <b>قوانين اللعبة:</b><br>
+        • الطبيب يحمي (حتى نفسه).<br>
+        • المافيا تقتل 20% من اللاعبين.<br>
+        • المحقق يكشف الهويات.<br>
+        • الفوز يُعلن فوراً عند انتهاء المافيا أو تساويهم مع المواطنين.
     </div>
     <input type="text" id="user" placeholder="اسمك">
     <input type="text" id="room" placeholder="رقم الغرفة">
     <input type="password" id="pass" placeholder="كلمة السر">
-    <button onclick="join()">دخول اللعبة</button>
+    <button onclick="join()">دخول الغرفة</button>
 </div>
 
 <div id="game-area" class="card hidden">
-    <div id="role-tag" style="color: #e74c3c; font-weight: bold;">انتظار اللاعبين...</div>
+    <div id="role-tag" style="color: #f1c40f; font-weight: bold; text-align: center; font-size: 20px;">انتظار...</div>
     <div id="timer" class="timer">00:30</div>
     <div id="chat"></div>
     <div id="actions" class="action-grid"></div>
     <hr>
     <div style="display: flex; gap: 5px;">
-        <input type="text" id="msg" placeholder="اكتب هنا...">
+        <input type="text" id="msg" placeholder="اكتب رسالة...">
         <button onclick="sendMsg()" style="width: 80px;">إرسال</button>
     </div>
     <button id="mic-btn" onclick="toggleMic()" style="background: #27ae60; margin-top: 10px;">🎤 ميكروفون: مغلق</button>
@@ -53,12 +51,15 @@
 <script>
     const socket = io();
     let myRoom, myRole, isAlive = true, micActive = false;
-    const roleAr = { mafia: 'مافيا 👺', doctor: 'طبيب 🩺', detective: 'محقق 🔍', citizen: 'مواطن 👤' };
+    let mediaRecorder;
 
     function join() {
-        const data = { user: document.getElementById('user').value, room: document.getElementById('room').value, pass: document.getElementById('pass').value };
-        myRoom = data.room;
-        socket.emit('join-room', data);
+        const u = document.getElementById('user').value;
+        const r = document.getElementById('room').value;
+        const p = document.getElementById('pass').value;
+        if(!u || !r) return alert("أكمل البيانات");
+        myRoom = r;
+        socket.emit('join-room', { user: u, room: r, pass: p });
     }
 
     socket.on('joined', () => {
@@ -68,39 +69,41 @@
 
     socket.on('your-role', (role) => {
         myRole = role;
-        document.getElementById('role-tag').innerText = "دورك: " + roleAr[role];
+        const roles = { mafia: 'مافيا 👺', doctor: 'طبيب 🩺', detective: 'محقق 🔍', citizen: 'مواطن 👤' };
+        document.getElementById('role-tag').innerText = "دورك: " + (roles[role] || role);
     });
 
     socket.on('time-update', (t) => {
-        document.getElementById('timer').innerText = t;
+        let m = Math.floor(t / 60);
+        let s = t % 60;
+        document.getElementById('timer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
     });
 
     socket.on('sys-msg', (m) => {
         const c = document.getElementById('chat');
-        c.innerHTML += `<p style="color: #27ae60">📢 ${m}</p>`;
+        c.innerHTML += `<p style="color: #2ecc71; margin: 5px 0;">📢 ${m}</p>`;
         c.scrollTop = c.scrollHeight;
     });
 
     socket.on('chat-msg', (d) => {
         const c = document.getElementById('chat');
-        c.innerHTML += `<p><b>${d.user}:</b> ${d.msg}</p>`;
+        c.innerHTML += `<p style="margin: 5px 0;"><b>${d.user}:</b> ${d.msg}</p>`;
         c.scrollTop = c.scrollHeight;
     });
 
     socket.on('phase-change', (data) => {
         const area = document.getElementById('actions');
         area.innerHTML = "";
-        
-        // إظهار الأزرار للأدوار في الليل، وللجميع في النهار
         if (isAlive) {
             data.players.forEach(p => {
-                if (p.id !== socket.id) {
+                // الطبيب يرى نفسه والآخرين، البقية يرون الآخرين فقط
+                if ((data.phase === 'night' && myRole === 'doctor') || p.id !== socket.id) {
                     const btn = document.createElement('button');
                     btn.className = "btn-action";
-                    btn.innerText = (data.phase === 'night' ? "استخدام القدرة على " : "تصويت ضد ") + p.name;
+                    btn.innerText = (data.phase === 'night' ? "قدرة على: " : "تصويت ضد: ") + p.name;
                     btn.onclick = () => {
                         socket.emit('action', { room: myRoom, target: p.id });
-                        area.innerHTML = "تم الاختيار!";
+                        area.innerHTML = "<span style='color:#aaa'>تم تسجيل قرارك</span>";
                     };
                     area.appendChild(btn);
                 }
@@ -108,31 +111,33 @@
         }
     });
 
-    // نظام الميكروفون
     async function toggleMic() {
         if (!isAlive) return;
-        micActive = !micActive;
         const btn = document.getElementById('mic-btn');
-        btn.innerText = micActive ? "🎤 ميكروفون: يعمل" : "🎤 ميكروفون: مغلق";
-        btn.style.background = micActive ? "#e67e22" : "#27ae60";
-
-        if (micActive) {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.ondataavailable = (e) => {
-                socket.emit('voice-data', { room: myRoom, stream: e.data });
-            };
-            mediaRecorder.start(500); // إرسال بيانات كل نصف ثانية
-            window.myStream = mediaRecorder;
+        if (!micActive) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) socket.emit('voice-data', { room: myRoom, stream: e.data });
+                };
+                mediaRecorder.start(200);
+                micActive = true;
+                btn.innerText = "🎤 الميكروفون: يعمل";
+                btn.style.background = "#e67e22";
+            } catch (err) { alert("افتح الميكروفون من الإعدادات!"); }
         } else {
-            window.myStream.stop();
+            mediaRecorder.stop();
+            micActive = false;
+            btn.innerText = "🎤 الميكروفون: مغلق";
+            btn.style.background = "#27ae60";
         }
     }
 
     socket.on('audio-stream', (data) => {
-        const blob = new Blob([data.stream], { type: 'audio/webm' });
-        const url = window.URL.createObjectURL(blob);
-        new Audio(url).play();
+        const blob = new Blob([data], { type: 'audio/webm' });
+        const audio = new Audio(window.URL.createObjectURL(blob));
+        audio.play().catch(() => {});
     });
 
     function sendMsg() {
