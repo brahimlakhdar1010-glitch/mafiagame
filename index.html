@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>Mafia</title>
+<title>Mafia Pro Voice</title>
 </head>
 <body>
 
@@ -11,7 +11,10 @@
 <input id="pass" placeholder="كلمة السر">
 <button onclick="join()">دخول</button>
 
-<button onclick="toggleMic()">🎤 تشغيل / إيقاف</button>
+<br><br>
+
+<button id="talk-btn">🎤 اضغط وتكلم</button>
+<button onclick="toggleMute()">🔇 كتم</button>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -20,7 +23,12 @@ const socket = io();
 let myRoom;
 let localStream;
 let peerConnections = {};
-let micActive = false;
+
+let myRole = null;
+let currentPhase = "waiting";
+let isAlive = true;
+let isMuted = false;
+let talking = false;
 
 const config = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -35,30 +43,78 @@ function join() {
     });
 }
 
-async function toggleMic() {
-    if (!micActive) {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+socket.on('your-role', (role) => {
+    myRole = role;
+});
 
-        socket.emit('ready', { room: myRoom });
+socket.on('phase-change', (data) => {
+    currentPhase = data.phase;
+    stopVoice();
+});
 
-        micActive = true;
-        alert("الميكروفون شغال");
-    } else {
-        localStream.getTracks().forEach(t => t.stop());
-        Object.values(peerConnections).forEach(pc => pc.close());
-        peerConnections = {};
-        micActive = false;
-        alert("الميكروفون توقف");
-    }
+function canSpeak() {
+    if (!isAlive) return false;
+    if (isMuted) return false;
+
+    if (currentPhase === "night" && myRole !== "mafia")
+        return false;
+
+    return true;
 }
 
+// 🎤 Push To Talk
+const btn = document.getElementById('talk-btn');
+
+btn.onmousedown = startTalking;
+btn.onmouseup = stopVoice;
+btn.ontouchstart = startTalking;
+btn.ontouchend = stopVoice;
+
+async function startTalking() {
+    if (talking) return;
+    if (!canSpeak()) return alert("لا يمكنك التحدث الآن");
+
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    socket.emit('ready', { room: myRoom });
+
+    talking = true;
+    btn.innerText = "🔴 تتكلم...";
+}
+
+function stopVoice() {
+    if (!talking) return;
+
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+    }
+
+    Object.values(peerConnections).forEach(pc => pc.close());
+    peerConnections = {};
+
+    talking = false;
+    btn.innerText = "🎤 اضغط وتكلم";
+}
+
+// 🔇 Mute
+function toggleMute() {
+    isMuted = !isMuted;
+    alert(isMuted ? "🔇 مكتوم" : "🔊 مسموع");
+}
+
+// 🎧 WebRTC
 socket.on('ready', async (data) => {
+    if (currentPhase === "night" && myRole !== "mafia") return;
+
     const pc = new RTCPeerConnection(config);
     peerConnections[data.from] = pc;
 
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     pc.ontrack = (e) => {
+        // 🌙 فلترة: غير المافيا في الليل
+        if (currentPhase === "night" && myRole !== "mafia") return;
+
         const audio = new Audio();
         audio.srcObject = e.streams[0];
         audio.play();
@@ -66,29 +122,27 @@ socket.on('ready', async (data) => {
 
     pc.onicecandidate = (e) => {
         if (e.candidate) {
-            socket.emit('ice-candidate', {
-                room: myRoom,
-                candidate: e.candidate
-            });
+            socket.emit('ice-candidate', { room: myRoom, candidate: e.candidate });
         }
     };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    socket.emit('offer', {
-        room: myRoom,
-        offer: offer
-    });
+    socket.emit('offer', { room: myRoom, offer });
 });
 
 socket.on('offer', async (data) => {
+    if (currentPhase === "night" && myRole !== "mafia") return;
+
     const pc = new RTCPeerConnection(config);
     peerConnections[data.from] = pc;
 
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     pc.ontrack = (e) => {
+        if (currentPhase === "night" && myRole !== "mafia") return;
+
         const audio = new Audio();
         audio.srcObject = e.streams[0];
         audio.play();
@@ -96,10 +150,7 @@ socket.on('offer', async (data) => {
 
     pc.onicecandidate = (e) => {
         if (e.candidate) {
-            socket.emit('ice-candidate', {
-                room: myRoom,
-                candidate: e.candidate
-            });
+            socket.emit('ice-candidate', { room: myRoom, candidate: e.candidate });
         }
     };
 
@@ -108,24 +159,17 @@ socket.on('offer', async (data) => {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    socket.emit('answer', {
-        room: myRoom,
-        answer: answer
-    });
+    socket.emit('answer', { room: myRoom, answer });
 });
 
 socket.on('answer', async (data) => {
     const pc = peerConnections[data.from];
-    if (pc) {
-        await pc.setRemoteDescription(data.answer);
-    }
+    if (pc) await pc.setRemoteDescription(data.answer);
 });
 
 socket.on('ice-candidate', async (data) => {
     const pc = peerConnections[data.from];
-    if (pc && data.candidate) {
-        await pc.addIceCandidate(data.candidate);
-    }
+    if (pc && data.candidate) await pc.addIceCandidate(data.candidate);
 });
 </script>
 
