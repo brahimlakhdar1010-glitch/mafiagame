@@ -154,7 +154,8 @@ io.on("connection", (socket) => {
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
       const targetRole = room.roles[targetId];
-      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'بريء ✅'}`);
+      // تم التعديل هنا ليظهر "مواطن" بدلاً من "بريء"
+      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`);
     }
   });
 
@@ -171,7 +172,6 @@ io.on("connection", (socket) => {
       if(rooms[roomId]) {
         rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
         io.to(roomId).emit("updatePlayers", rooms[roomId].players);
-        // مسح الغرفة إذا أصبحت فارغة لتوفير الذاكرة
         if(rooms[roomId].players.length === 0) {
             clearInterval(rooms[roomId].timerInterval);
             delete rooms[roomId];
