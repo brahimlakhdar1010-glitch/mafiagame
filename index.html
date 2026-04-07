@@ -71,7 +71,6 @@ socket.on("phaseUpdate", phase => {
     const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
     document.getElementById("phase-text").textContent = pText[phase];
     
-    // إظهار زر إنهاء اليوم فقط في النهار
     const endDayBtn = document.getElementById("end-day-btn");
     if (phase === "day") endDayBtn.classList.remove("hidden");
     else endDayBtn.classList.add("hidden");
@@ -139,7 +138,7 @@ socket.on("roleAssigned", role => {
 
 function createRoom() {
     socket.emit("createRoom", { username: document.getElementById("username").value, password: document.getElementById("password").value });
-    document.getElementById("controls").classList.remove("hidden"); // إظهار التحكم للمسؤول
+    document.getElementById("controls").classList.remove("hidden");
 }
 
 function joinRoom() { 
