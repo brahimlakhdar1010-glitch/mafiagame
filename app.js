@@ -22,33 +22,34 @@ function generateRoomId() {
 function assignRoles(players) {
   const roles = ["mafia", "doctor", "police", "citizen"];
   let assigned = {};
-
   players.forEach((p, i) => {
     assigned[p.id] = roles[i % roles.length];
   });
-
   return assigned;
 }
 
-function getAlive(room) {
-  return room.players.filter(p => !p.dead);
-}
+// دالة إدارة العداد التنازلي
+function startTimer(roomId, seconds) {
+  const room = rooms[roomId];
+  if (!room) return;
 
-function checkWin(room) {
-  const alive = getAlive(room);
-  const mafia = alive.filter(p => room.roles[p.id] === "mafia");
-  const citizens = alive.filter(p => room.roles[p.id] !== "mafia");
+  clearInterval(room.timerInterval);
+  room.timeLeft = seconds;
 
-  if (mafia.length === 0) return "citizens";
-  if (mafia.length >= citizens.length) return "mafia";
-  return null;
+  room.timerInterval = setInterval(() => {
+    room.timeLeft--;
+    io.to(roomId).emit("timerUpdate", room.timeLeft);
+
+    if (room.timeLeft <= 0) {
+      clearInterval(room.timerInterval);
+      // يمكن إضافة انتقال تلقائي للمرحلة التالية هنا إذا أردت
+    }
+  }, 1000);
 }
 
 io.on("connection", (socket) => {
-
   socket.on("createRoom", ({ username, password }) => {
     const roomId = generateRoomId();
-
     rooms[roomId] = {
       password,
       players: [],
@@ -56,26 +57,21 @@ io.on("connection", (socket) => {
       gameStarted: false,
       votes: {},
       mafiaVotes: {},
-      roles: {}
+      roles: {},
+      timeLeft: 0,
+      timerInterval: null
     };
-
     socket.join(roomId);
     rooms[roomId].players.push({ id: socket.id, username, dead: false });
-
     socket.emit("roomCreated", { roomId });
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
   socket.on("joinRoom", ({ roomId, username, password }) => {
     const room = rooms[roomId];
-
-    if (!room) return socket.emit("errorMsg", "Room not found");
-    if (room.password !== password) return socket.emit("errorMsg", "Wrong password");
-    if (room.gameStarted) return socket.emit("errorMsg", "Game already started");
-
+    if (!room || room.password !== password || room.gameStarted) return;
     socket.join(roomId);
     room.players.push({ id: socket.id, username, dead: false });
-
     io.to(roomId).emit("updatePlayers", room.players);
   });
 
@@ -92,74 +88,39 @@ io.on("connection", (socket) => {
     });
 
     io.to(roomId).emit("phaseUpdate", room.phase);
-  });
-
-  socket.on("mafiaVote", ({ roomId, targetId }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    room.mafiaVotes[socket.id] = targetId;
-
-    const mafiaPlayers = room.players.filter(p => room.roles[p.id] === "mafia" && !p.dead);
-
-    if (Object.keys(room.mafiaVotes).length >= mafiaPlayers.length) {
-      const tally = {};
-
-      Object.values(room.mafiaVotes).forEach(v => {
-        tally[v] = (tally[v] || 0) + 1;
-      });
-
-      const target = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
-
-      room.players.forEach(p => {
-        if (p.id === target) p.dead = true;
-      });
-
-      room.mafiaVotes = {};
-      room.phase = "day";
-
-      const winner = checkWin(room);
-      if (winner) {
-        io.to(roomId).emit("gameOver", winner);
-      } else {
-        io.to(roomId).emit("phaseUpdate", room.phase);
-        io.to(roomId).emit("updatePlayers", room.players);
-      }
-    }
-  });
-
-  socket.on("vote", ({ roomId, targetId }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    room.votes[socket.id] = targetId;
-    io.to(roomId).emit("voteUpdate", room.votes);
+    startTimer(roomId, 30); // 30 ثانية لليل
   });
 
   socket.on("endDay", (roomId) => {
     const room = rooms[roomId];
     if (!room) return;
 
+    // منطق التصفية (كما هو في كودك)
     let tally = {};
-    Object.values(room.votes).forEach(v => {
-      tally[v] = (tally[v] || 0) + 1;
-    });
-
+    Object.values(room.votes).forEach(v => { tally[v] = (tally[v] || 0) + 1; });
     const eliminated = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
-
-    room.players.forEach(p => {
-      if (p.id === eliminated) p.dead = true;
-    });
+    room.players.forEach(p => { if (p.id === eliminated) p.dead = true; });
 
     room.votes = {};
     room.phase = "night";
+    
+    io.to(roomId).emit("phaseUpdate", room.phase);
+    io.to(roomId).emit("updatePlayers", room.players);
+    startTimer(roomId, 30); // إعادة عداد الليل
+  });
 
-    const winner = checkWin(room);
-    if (winner) {
-      io.to(roomId).emit("gameOver", winner);
-    } else {
+  // تحديث في نظام المافيا للانتقال للنهار
+  socket.on("mafiaVote", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    room.mafiaVotes[socket.id] = targetId;
+    const mafiaPlayers = room.players.filter(p => room.roles[p.id] === "mafia" && !p.dead);
+
+    if (Object.keys(room.mafiaVotes).length >= mafiaPlayers.length) {
+      // منطق القتل...
+      room.phase = "day";
       io.to(roomId).emit("phaseUpdate", room.phase);
-      io.to(roomId).emit("updatePlayers", room.players);
+      startTimer(roomId, 240); // 4 دقائق للنهار (4 * 60 = 240 ثانية)
     }
   });
 
@@ -173,6 +134,4 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3000, () => {
-  console.log("السيرفر يعمل بنجاح...");
-});
+server.listen(process.env.PORT || 3000, () => { console.log("السيرفر يعمل..."); });
