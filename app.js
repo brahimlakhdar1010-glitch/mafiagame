@@ -1,108 +1,177 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<script src="https://cdn.tailwindcss.com"></script>
-<title>Mafia Game Pro</title>
-</head>
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const path = require("path");
 
-<body class="bg-gray-900 text-white p-6">
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-<div class="max-w-xl mx-auto text-center">
+app.use(express.static("public"));
 
-<h1 class="text-3xl font-bold mb-4">🎭 Mafia Game Pro</h1>
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-<div id="setup-area">
-<input id="username" class="p-2 m-1 text-black" placeholder="Username" />
-<input id="password" class="p-2 m-1 text-black" placeholder="Password" />
+let rooms = {};
 
-<br>
+function generateRoomId() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
-<button onclick="createRoom()" class="bg-blue-500 px-4 py-2 m-2 rounded">Create Room</button>
+function assignRoles(players) {
+  const roles = ["mafia", "doctor", "police", "citizen"];
+  let assigned = {};
 
-<br><br>
-
-<input id="roomId" class="p-2 text-black" placeholder="Room ID" />
-<button onclick="joinRoom()" class="bg-green-500 px-4 py-2 m-2 rounded">Join Room</button>
-</div>
-
-<hr class="my-4">
-
-<h2 class="text-xl">Phase: <span id="phase">Lobby</span></h2>
-<div id="my-role" class="text-2xl font-bold text-yellow-400 my-2"></div>
-
-<ul id="players" class="mt-4"></ul>
-
-<div id="controls" class="mt-4 space-x-2">
-<button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">Start</button>
-<button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">End Day</button>
-</div>
-
-</div>
-
-<script src="/socket.io/socket.io.js"></script>
-<script>
-const socket = io();
-let currentRoom;
-
-function createRoom() {
-  socket.emit("createRoom", {
-    username: document.getElementById("username").value,
-    password: document.getElementById("password").value
+  players.forEach((p, i) => {
+    assigned[p.id] = roles[i % roles.length];
   });
+
+  return assigned;
 }
 
-function joinRoom() {
-  currentRoom = document.getElementById("roomId").value;
+function getAlive(room) {
+  return room.players.filter(p => !p.dead);
+}
 
-  socket.emit("joinRoom", {
-    roomId: currentRoom,
-    username: document.getElementById("username").value,
-    password: document.getElementById("password").value
+function checkWin(room) {
+  const alive = getAlive(room);
+  const mafia = alive.filter(p => room.roles[p.id] === "mafia");
+  const citizens = alive.filter(p => room.roles[p.id] !== "mafia");
+
+  if (mafia.length === 0) return "citizens";
+  if (mafia.length >= citizens.length) return "mafia";
+  return null;
+}
+
+io.on("connection", (socket) => {
+
+  socket.on("createRoom", ({ username, password }) => {
+    const roomId = generateRoomId();
+
+    rooms[roomId] = {
+      password,
+      players: [],
+      phase: "lobby",
+      gameStarted: false,
+      votes: {},
+      mafiaVotes: {},
+      roles: {}
+    };
+
+    socket.join(roomId);
+    rooms[roomId].players.push({ id: socket.id, username, dead: false });
+
+    socket.emit("roomCreated", { roomId });
+    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
-}
 
-function startGame() {
-  socket.emit("startGame", currentRoom);
-}
+  socket.on("joinRoom", ({ roomId, username, password }) => {
+    const room = rooms[roomId];
 
-function endDay() {
-  socket.emit("endDay", currentRoom);
-}
+    if (!room) return socket.emit("errorMsg", "Room not found");
+    if (room.password !== password) return socket.emit("errorMsg", "Wrong password");
+    if (room.gameStarted) return socket.emit("errorMsg", "Game already started");
 
-socket.on("roomCreated", d => {
-  currentRoom = d.roomId; 
-  alert("Room ID: " + d.roomId);
-});
+    socket.join(roomId);
+    room.players.push({ id: socket.id, username, dead: false });
 
-socket.on("updatePlayers", players => {
-  const list = document.getElementById("players");
-  list.innerHTML = "";
+    io.to(roomId).emit("updatePlayers", room.players);
+  });
 
-  players.forEach(p => {
-    const li = document.createElement("li");
-    li.textContent = p.username + (p.dead ? " ☠" : "");
-    list.appendChild(li);
+  socket.on("startGame", (roomId) => {
+    const room = rooms[roomId];
+    // التعديل هنا: منع إعادة البدء إذا كانت اللعبة تعمل بالفعل
+    if (!room || room.gameStarted) return;
+
+    room.gameStarted = true;
+    room.phase = "night";
+    room.roles = assignRoles(room.players);
+
+    room.players.forEach(p => {
+      io.to(p.id).emit("roleAssigned", room.roles[p.id]);
+    });
+
+    io.to(roomId).emit("phaseUpdate", room.phase);
+  });
+
+  socket.on("mafiaVote", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    room.mafiaVotes[socket.id] = targetId;
+
+    const mafiaPlayers = room.players.filter(p => room.roles[p.id] === "mafia" && !p.dead);
+
+    if (Object.keys(room.mafiaVotes).length >= mafiaPlayers.length) {
+      const tally = {};
+
+      Object.values(room.mafiaVotes).forEach(v => {
+        tally[v] = (tally[v] || 0) + 1;
+      });
+
+      const target = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+
+      room.players.forEach(p => {
+        if (p.id === target) p.dead = true;
+      });
+
+      room.mafiaVotes = {};
+      room.phase = "day";
+
+      const winner = checkWin(room);
+      if (winner) {
+        io.to(roomId).emit("gameOver", winner);
+      } else {
+        io.to(roomId).emit("phaseUpdate", room.phase);
+        io.to(roomId).emit("updatePlayers", room.players);
+      }
+    }
+  });
+
+  socket.on("vote", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    room.votes[socket.id] = targetId;
+    io.to(roomId).emit("voteUpdate", room.votes);
+  });
+
+  socket.on("endDay", (roomId) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    let tally = {};
+    Object.values(room.votes).forEach(v => {
+      tally[v] = (tally[v] || 0) + 1;
+    });
+
+    const eliminated = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+
+    room.players.forEach(p => {
+      if (p.id === eliminated) p.dead = true;
+    });
+
+    room.votes = {};
+    room.phase = "night";
+
+    const winner = checkWin(room);
+    if (winner) {
+      io.to(roomId).emit("gameOver", winner);
+    } else {
+      io.to(roomId).emit("phaseUpdate", room.phase);
+      io.to(roomId).emit("updatePlayers", room.players);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    for (let roomId in rooms) {
+      rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
+      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    }
   });
 });
 
-socket.on("phaseUpdate", phase => {
-  document.getElementById("phase").textContent = phase;
+server.listen(process.env.PORT || 3000, () => {
+  console.log("Server running...");
 });
-
-socket.on("roleAssigned", role => {
-  alert("Your role: " + role);
-  // تحديث الواجهة: إظهار الدور وإخفاء أدوات الدخول
-  document.getElementById("my-role").textContent = "Your Role: " + role.toUpperCase();
-  document.getElementById("setup-area").style.display = "none";
-  document.getElementById("controls").style.display = "none";
-});
-
-socket.on("gameOver", winner => {
-  alert("Winner: " + winner);
-  location.reload(); // إعادة تحميل الصفحة عند انتهاء اللعبة
-});
-</script>
-
-</body>
-</html>
