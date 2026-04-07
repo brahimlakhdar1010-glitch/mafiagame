@@ -1,214 +1,117 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*" },
-    transports: ['websocket', 'polling']
-});
+const io = new Server(server);
 
-app.use(express.static(__dirname + '/'));
+app.use(express.static("public"));
 
 let rooms = {};
 
-io.on('connection', (socket) => {
-    socket.on('join-room', (data) => {
-        const roomID = String(data.room);
-        const { user, pass } = data;
+function generateRoomId() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
-        if (!rooms[roomID]) {
-            rooms[roomID] = { 
-                password: pass, players: [], phase: 'waiting', 
-                timer: 30, interval: null, nightActions: { kill: null, save: null },
-                votes: {} 
-            };
-        }
+function assignRoles(players) {
+  const roles = ["mafia", "doctor", "police", "citizen"];
+  let assigned = {};
 
-        // قفل الغرفة إذا بدأت اللعبة
-        if (rooms[roomID].phase !== 'waiting') {
-            return socket.emit('sys-msg', '⚠️ اللعبة بدأت بالفعل، لا يمكنك الدخول الآن.');
-        }
+  players.forEach((p, i) => {
+    assigned[p.id] = roles[i % roles.length];
+  });
 
-        if (rooms[roomID].password !== pass) return socket.emit('error-msg', 'كلمة السر خاطئة!');
-        
-        const player = { id: socket.id, name: user, role: 'citizen', alive: true };
-        rooms[roomID].players.push(player);
-        socket.join(roomID);
+  return assigned;
+}
 
-        socket.emit('joined', { room: roomID });
-        io.to(roomID).emit('sys-msg', `${user} انضم للمدينة.`);
+io.on("connection", (socket) => {
+  console.log("Connected:", socket.id);
 
-        if (rooms[roomID].players.length >= 4 && rooms[roomID].phase === 'waiting') {
-            startCountdown(roomID);
-        }
+  // Create Room
+  socket.on("createRoom", ({ username, password }) => {
+    const roomId = generateRoomId();
+
+    rooms[roomId] = {
+      password,
+      players: [],
+      gameStarted: false,
+      votes: {},
+      roles: {}
+    };
+
+    socket.join(roomId);
+    rooms[roomId].players.push({ id: socket.id, username });
+
+    socket.emit("roomCreated", { roomId });
+    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+  });
+
+  // Join Room
+  socket.on("joinRoom", ({ roomId, username, password }) => {
+    const room = rooms[roomId];
+
+    if (!room) return socket.emit("errorMsg", "Room not found");
+    if (room.password !== password) return socket.emit("errorMsg", "Wrong password");
+    if (room.gameStarted) return socket.emit("errorMsg", "Game already started");
+
+    socket.join(roomId);
+    room.players.push({ id: socket.id, username });
+
+    io.to(roomId).emit("updatePlayers", room.players);
+  });
+
+  // Start Game
+  socket.on("startGame", (roomId) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    room.gameStarted = true;
+
+    const roles = assignRoles(room.players);
+    room.roles = roles;
+
+    room.players.forEach((p) => {
+      io.to(p.id).emit("roleAssigned", roles[p.id]);
     });
 
-    socket.on('voice-data', (data) => {
-        socket.to(String(data.room)).emit('audio-stream', data.stream);
-    });
+    io.to(roomId).emit("gameStarted");
+  });
 
-    socket.on('send-chat', (data) => {
-        const room = rooms[String(data.room)];
-        if (room) {
-            const p = room.players.find(pl => pl.id === socket.id);
-            if (p && p.alive) { 
-                io.to(String(data.room)).emit('chat-msg', { user: p.name, msg: data.msg });
-            }
-        }
-    });
+  // Voting
+  socket.on("vote", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
 
-    socket.on('action', (data) => {
-        const room = rooms[String(data.room)];
-        const p = room.players.find(pl => pl.id === socket.id);
-        if (!p || !p.alive) return;
+    room.votes[socket.id] = targetId;
+    io.to(roomId).emit("voteUpdate", room.votes);
+  });
 
-        if (room.phase === 'night') {
-            if (p.role === 'mafia') room.nightActions.kill = data.target;
-            if (p.role === 'doctor') room.nightActions.save = data.target;
-            if (p.role === 'detective') {
-                const target = room.players.find(pl => pl.id === data.target);
-                socket.emit('sys-msg', `🔍 كشف الهوية: ${target.name} هو ${target.role === 'mafia' ? 'مافيا 👺' : 'مواطن 👤'}`);
-            }
-        } else if (room.phase === 'day') {
-            room.votes[data.target] = (room.votes[data.target] || 0) + 1;
-        }
-    });
+  // Voice signaling (WebRTC)
+  socket.on("voiceOffer", (data) => {
+    socket.to(data.roomId).emit("voiceOffer", data);
+  });
+
+  socket.on("voiceAnswer", (data) => {
+    socket.to(data.roomId).emit("voiceAnswer", data);
+  });
+
+  socket.on("iceCandidate", (data) => {
+    socket.to(data.roomId).emit("iceCandidate", data);
+  });
+
+  // Disconnect
+  socket.on("disconnect", () => {
+    for (let roomId in rooms) {
+      rooms[roomId].players = rooms[roomId].players.filter(
+        (p) => p.id !== socket.id
+      );
+
+      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+    }
+  });
 });
 
-function checkWin(roomID) {
-    const room = rooms[roomID];
-    const alives = room.players.filter(p => p.alive);
-    const mafias = alives.filter(p => p.role === 'mafia').length;
-    const citizens = alives.length - mafias;
-
-    if (mafias === 0) {
-        io.to(roomID).emit('sys-msg', "🎉 مبروك! فاز المواطنون وتم القضاء على المافيا!");
-        resetRoom(roomID);
-        return true;
-    } else if (mafias >= citizens) {
-        io.to(roomID).emit('sys-msg', "💀 خسرتم! سيطرت المافيا على المدينة بالكامل.");
-        resetRoom(roomID);
-        return true;
-    }
-    return false;
-}
-
-function resetRoom(roomID) {
-    if (rooms[roomID].interval) clearInterval(rooms[roomID].interval);
-    rooms[roomID].phase = 'waiting';
-    rooms[roomID].players.forEach(p => p.alive = true);
-}
-
-function startCountdown(roomID) {
-    const room = rooms[roomID];
-    room.phase = 'starting';
-    let timeLeft = 30;
-    room.interval = setInterval(() => {
-        timeLeft--;
-        io.to(roomID).emit('time-update', timeLeft);
-        if (timeLeft <= 0) {
-            clearInterval(room.interval);
-            assignRoles(roomID);
-        }
-    }, 1000);
-}
-
-function assignRoles(roomID) {
-    const room = rooms[roomID];
-    let players = room.players;
-    let mafiaCount = Math.max(1, Math.floor(players.length * 0.2));
-    let shuffled = [...players].sort(() => 0.5 - Math.random());
-
-    shuffled.forEach((p, i) => {
-        if (i < mafiaCount) p.role = 'mafia';
-        else if (i === mafiaCount) p.role = 'doctor';
-        else if (i === mafiaCount + 1) p.role = 'detective';
-        else p.role = 'citizen';
-        io.to(p.id).emit('your-role', p.role);
-    });
-    startNight(roomID);
-}
-
-function startNight(roomID) {
-    if (checkWin(roomID)) return;
-    const room = rooms[roomID];
-    room.phase = 'night';
-    room.nightActions = { kill: null, save: null };
-    io.to(roomID).emit('sys-msg', "🌑 حل الليل.. استيقظت المافيا، الطبيب، والمحقق.");
-    io.to(roomID).emit('phase-change', { phase: 'night', players: room.players.filter(p => p.alive) });
-    
-    let timeLeft = 30;
-    room.interval = setInterval(() => {
-        timeLeft--;
-        io.to(roomID).emit('time-update', timeLeft);
-        if (timeLeft <= 0) {
-            clearInterval(room.interval);
-            processNight(roomID);
-        }
-    }, 1000);
-}
-
-function processNight(roomID) {
-    const room = rooms[roomID];
-    let killedID = room.nightActions.kill;
-    let savedID = room.nightActions.save;
-
-    if (killedID && killedID === savedID) {
-        const savedName = room.players.find(p => p.id === savedID).name;
-        io.to(roomID).emit('sys-msg', `🛡️ الطبيب بطل! تم إنقاذ ${savedName} من الموت.`);
-    } else if (killedID) {
-        const victim = room.players.find(p => p.id === killedID);
-        if (victim) {
-            victim.alive = false;
-            io.to(victim.id).emit('is-dead');
-            io.to(roomID).emit('sys-msg', `🚨 فاجعة: المافيا قتلت ${victim.name}!`);
-        }
-    } else {
-        io.to(roomID).emit('sys-msg', "🌙 ليلة هادئة.. لم يمت أحد.");
-    }
-    
-    if (!checkWin(roomID)) startDay(roomID);
-}
-
-function startDay(roomID) {
-    const room = rooms[roomID];
-    room.phase = 'day';
-    room.votes = {};
-    io.to(roomID).emit('sys-msg', "☀️ استيقظت المدينة! وقت النقاش والتصويت على المشتبه بهم.");
-    io.to(roomID).emit('phase-change', { phase: 'day', players: room.players.filter(p => p.alive) });
-    
-    let timeLeft = 240;
-    room.interval = setInterval(() => {
-        timeLeft--;
-        io.to(roomID).emit('time-update', timeLeft);
-        if (timeLeft <= 0) {
-            clearInterval(room.interval);
-            processVoting(roomID);
-        }
-    }, 1000);
-}
-
-function processVoting(roomID) {
-    const room = rooms[roomID];
-    let topVoted = null, maxVotes = 0;
-    for (let id in room.votes) {
-        if (room.votes[id] > maxVotes) { maxVotes = room.votes[id]; topVoted = id; }
-    }
-
-    if (topVoted) {
-        const victim = room.players.find(p => p.id === topVoted);
-        if (victim) {
-            victim.alive = false;
-            io.to(victim.id).emit('is-dead');
-            io.to(roomID).emit('sys-msg', `⚖️ قرر الشعب إعدام ${victim.name}!`);
-        }
-    } else {
-        io.to(roomID).emit('sys-msg', "⚖️ لم يتفق أحد على التصويت اليوم.");
-    }
-
-    if (!checkWin(roomID)) startNight(roomID);
-}
-
-server.listen(process.env.PORT || 3000);
+server.listen(process.env.PORT || 3000, () => {
+  console.log("Server running...");
+});
