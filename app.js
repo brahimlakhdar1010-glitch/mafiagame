@@ -51,7 +51,6 @@ function startTimer(roomId, seconds) {
 
     if (room.timeLeft <= 0) {
       clearInterval(room.timerInterval);
-      // الانتقال التلقائي عند انتهاء الوقت
       if (room.phase === "night") {
         resolveNight(roomId);
       } else if (room.phase === "day") {
@@ -61,7 +60,6 @@ function startTimer(roomId, seconds) {
   }, 1000);
 }
 
-// دالة إنهاء الليل ومعالجة القرارات
 function resolveNight(roomId) {
   const room = rooms[roomId];
   if (!room) return;
@@ -86,10 +84,9 @@ function resolveNight(roomId) {
 
   const winner = checkWin(room);
   if (winner) io.to(roomId).emit("gameOver", winner);
-  else startTimer(roomId, 240); // 4 دقائق نهار
+  else startTimer(roomId, 240);
 }
 
-// دالة إنهاء النهار ومعالجة التصويت
 function resolveDay(roomId) {
   const room = rooms[roomId];
   if (!room) return;
@@ -114,7 +111,7 @@ function resolveDay(roomId) {
 
   const winner = checkWin(room);
   if (winner) io.to(roomId).emit("gameOver", winner);
-  else startTimer(roomId, 30); // 30 ثانية ليل
+  else startTimer(roomId, 30);
 }
 
 io.on("connection", (socket) => {
@@ -150,16 +147,14 @@ io.on("connection", (socket) => {
     startTimer(roomId, 30);
   });
 
-  // استقبال الأكشن من الأدوار
   socket.on("action", ({ roomId, targetId, type }) => {
     const room = rooms[roomId];
     if (!room || room.phase !== "night") return;
-
     if (type === "mafia") room.nightAction.mafia = targetId;
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
       const targetRole = room.roles[targetId];
-      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص المختبر هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'بريء ✅'}`);
+      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'بريء ✅'}`);
     }
   });
 
@@ -176,6 +171,11 @@ io.on("connection", (socket) => {
       if(rooms[roomId]) {
         rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
         io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+        // مسح الغرفة إذا أصبحت فارغة لتوفير الذاكرة
+        if(rooms[roomId].players.length === 0) {
+            clearInterval(rooms[roomId].timerInterval);
+            delete rooms[roomId];
+        }
       }
     }
   });
