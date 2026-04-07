@@ -36,7 +36,7 @@
 
     <div id="controls" class="mt-4 space-x-2 space-x-reverse hidden">
         <button id="start-btn" onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">بدء اللعبة</button>
-        <button onclick="endDay()" class="bg-yellow-600 px-3 py-1 rounded">إنهاء التصويت مبكراً</button>
+        <button id="end-day-btn" onclick="endDay()" class="bg-yellow-600 px-3 py-1 rounded hidden">إنهاء التصويت مبكراً</button>
     </div>
 </div>
 
@@ -70,6 +70,12 @@ socket.on("phaseUpdate", phase => {
     currentPhase = phase;
     const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
     document.getElementById("phase-text").textContent = pText[phase];
+    
+    // إظهار زر إنهاء اليوم فقط في النهار
+    const endDayBtn = document.getElementById("end-day-btn");
+    if (phase === "day") endDayBtn.classList.remove("hidden");
+    else endDayBtn.classList.add("hidden");
+
     refreshUI();
 });
 
@@ -85,7 +91,6 @@ socket.on("updatePlayers", players => {
         li.className = `flex justify-between items-center p-2 bg-gray-800 rounded ${p.dead ? 'dead' : ''}`;
         li.innerHTML = `<span>${p.username} ${p.dead ? '☠' : ''}</span>`;
         
-        // إضافة أزرار الأكشن بناء على المرحلة والدور
         if (!isDead && !p.dead && currentPhase !== "lobby") {
             const btn = document.createElement("button");
             btn.className = "bg-red-700 px-2 py-1 rounded text-sm";
@@ -119,7 +124,7 @@ function sendVote(targetId) {
 function refreshUI() {
     if (isDead) {
         document.getElementById("my-role").textContent += " (أنت ميت ☠)";
-        document.getElementById("controls").style.display = "none";
+        document.getElementById("controls").classList.add("hidden");
     }
 }
 
@@ -127,18 +132,33 @@ socket.on("roleAssigned", role => {
     myRole = role;
     const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
     document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
-    document.getElementById("setup-area").style.display = "none";
+    document.getElementById("setup-area").classList.add("hidden");
     document.getElementById("controls").classList.remove("hidden");
-    document.getElementById("start-btn").style.display = "none";
+    document.getElementById("start-btn").classList.add("hidden");
 });
 
-// الدوال الأساسية
-function createRoom() { socket.emit("createRoom", { username: username.value, password: password.value }); }
-function joinRoom() { currentRoom = roomId.value; socket.emit("joinRoom", { roomId: currentRoom, username: username.value, password: password.value }); }
+function createRoom() {
+    socket.emit("createRoom", { username: document.getElementById("username").value, password: document.getElementById("password").value });
+    document.getElementById("controls").classList.remove("hidden"); // إظهار التحكم للمسؤول
+}
+
+function joinRoom() { 
+    currentRoom = document.getElementById("roomId").value; 
+    socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value }); 
+}
+
 function startGame() { socket.emit("startGame", currentRoom); }
 function endDay() { socket.emit("endDay", currentRoom); }
-socket.on("roomCreated", d => { currentRoom = d.roomId; alert("تم إنشاء الغرفة: " + d.roomId); });
-socket.on("gameOver", winner => { alert("انتهت اللعبة! الفائز: " + winner); location.reload(); });
+
+socket.on("roomCreated", d => { 
+    currentRoom = d.roomId; 
+    alert("تم إنشاء الغرفة: " + d.roomId); 
+});
+
+socket.on("gameOver", winner => { 
+    alert("انتهت اللعبة! الفائز: " + winner); 
+    location.reload(); 
+});
 </script>
 </body>
 </html>
