@@ -1,38 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Mafia Game Pro</title>
+<meta charset="UTF-8">
+<script src="https://cdn.tailwindcss.com"></script>
+<title>Mafia Game Pro</title>
 </head>
-<body>
 
-<h1>Mafia Game Pro 🎭</h1>
+<body class="bg-gray-900 text-white p-6">
 
-<div>
-  <input id="username" placeholder="Username" />
-  <input id="password" placeholder="Password" />
-  <button onclick="createRoom()">Create Room</button>
-</div>
+<div class="max-w-xl mx-auto text-center">
+
+<h1 class="text-3xl font-bold mb-4">🎭 Mafia Game Pro</h1>
+
+<input id="username" class="p-2 m-1 text-black" placeholder="Username" />
+<input id="password" class="p-2 m-1 text-black" placeholder="Password" />
 
 <br>
 
-<div>
-  <input id="roomId" placeholder="Room ID" />
-  <button onclick="joinRoom()">Join Room</button>
+<button onclick="createRoom()" class="bg-blue-500 px-4 py-2 m-2 rounded">Create Room</button>
+
+<br><br>
+
+<input id="roomId" class="p-2 text-black" placeholder="Room ID" />
+<button onclick="joinRoom()" class="bg-green-500 px-4 py-2 m-2 rounded">Join Room</button>
+
+<hr class="my-4">
+
+<h2 class="text-xl">Phase: <span id="phase">Lobby</span></h2>
+
+<ul id="players" class="mt-4"></ul>
+
+<div class="mt-4 space-x-2">
+<button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">Start</button>
+<button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">End Day</button>
 </div>
 
-<hr>
-
-<h3>Players</h3>
-<ul id="players"></ul>
-
-<button onclick="startGame()">Start Game</button>
-<button onclick="enableMic()">🎤 Enable Microphone</button>
+</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-let currentRoom = null;
+let currentRoom;
 
 function createRoom() {
   socket.emit("createRoom", {
@@ -55,82 +63,30 @@ function startGame() {
   socket.emit("startGame", currentRoom);
 }
 
-socket.on("roomCreated", (data) => {
-  currentRoom = data.roomId;
-  alert("Room ID: " + currentRoom);
-});
+function endDay() {
+  socket.emit("endDay", currentRoom);
+}
 
-socket.on("updatePlayers", (players) => {
+socket.on("roomCreated", d => alert("Room ID: " + d.roomId));
+
+socket.on("updatePlayers", players => {
   const list = document.getElementById("players");
   list.innerHTML = "";
 
   players.forEach(p => {
     const li = document.createElement("li");
-    li.textContent = p.username;
+    li.textContent = p.username + (p.dead ? " ☠" : "");
     list.appendChild(li);
   });
 });
 
-socket.on("roleAssigned", (role) => {
-  alert("Your role: " + role);
+socket.on("phaseUpdate", phase => {
+  document.getElementById("phase").textContent = phase;
 });
 
-socket.on("errorMsg", (msg) => alert(msg));
+socket.on("roleAssigned", role => alert("Your role: " + role));
 
-/* ================= Voice ================= */
-
-let localStream;
-let peerConnections = {};
-const config = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-};
-
-async function enableMic() {
-  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  alert("Microphone enabled 🎤");
-}
-
-socket.on("voiceOffer", async (data) => {
-  const pc = new RTCPeerConnection(config);
-  peerConnections[data.from] = pc;
-
-  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      socket.emit("iceCandidate", {
-        roomId: currentRoom,
-        candidate: e.candidate
-      });
-    }
-  };
-
-  pc.ontrack = e => {
-    const audio = document.createElement("audio");
-    audio.srcObject = e.streams[0];
-    audio.autoplay = true;
-    document.body.appendChild(audio);
-  };
-
-  await pc.setRemoteDescription(data.offer);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-
-  socket.emit("voiceAnswer", {
-    roomId: currentRoom,
-    answer
-  });
-});
-
-socket.on("voiceAnswer", async (data) => {
-  const pc = peerConnections[data.from];
-  if (pc) await pc.setRemoteDescription(data.answer);
-});
-
-socket.on("iceCandidate", async (data) => {
-  const pc = peerConnections[data.from];
-  if (pc) await pc.addIceCandidate(data.candidate);
-});
+socket.on("gameOver", winner => alert("Winner: " + winner));
 </script>
 
 </body>
