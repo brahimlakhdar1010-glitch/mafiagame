@@ -25,29 +25,42 @@ function assignRoles(players) {
   return assigned;
 }
 
-io.on("connection", (socket) => {
-  console.log("Connected:", socket.id);
+function getAlive(room) {
+  return room.players.filter(p => !p.dead);
+}
 
-  // Create Room
+function checkWin(room) {
+  const alive = getAlive(room);
+  const mafia = alive.filter(p => room.roles[p.id] === "mafia");
+  const citizens = alive.filter(p => room.roles[p.id] !== "mafia");
+
+  if (mafia.length === 0) return "citizens";
+  if (mafia.length >= citizens.length) return "mafia";
+  return null;
+}
+
+io.on("connection", (socket) => {
+
   socket.on("createRoom", ({ username, password }) => {
     const roomId = generateRoomId();
 
     rooms[roomId] = {
       password,
       players: [],
+      phase: "lobby",
       gameStarted: false,
       votes: {},
+      mafiaVotes: {},
       roles: {}
     };
 
     socket.join(roomId);
-    rooms[roomId].players.push({ id: socket.id, username });
+    rooms[roomId].players.push({ id: socket.id, username, dead: false });
 
     socket.emit("roomCreated", { roomId });
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
-  // Join Room
   socket.on("joinRoom", ({ roomId, username, password }) => {
     const room = rooms[roomId];
 
@@ -56,29 +69,62 @@ io.on("connection", (socket) => {
     if (room.gameStarted) return socket.emit("errorMsg", "Game already started");
 
     socket.join(roomId);
-    room.players.push({ id: socket.id, username });
+    room.players.push({ id: socket.id, username, dead: false });
 
     io.to(roomId).emit("updatePlayers", room.players);
   });
 
-  // Start Game
   socket.on("startGame", (roomId) => {
     const room = rooms[roomId];
     if (!room) return;
 
     room.gameStarted = true;
+    room.phase = "night";
+    room.roles = assignRoles(room.players);
 
-    const roles = assignRoles(room.players);
-    room.roles = roles;
-
-    room.players.forEach((p) => {
-      io.to(p.id).emit("roleAssigned", roles[p.id]);
+    room.players.forEach(p => {
+      io.to(p.id).emit("roleAssigned", room.roles[p.id]);
     });
 
-    io.to(roomId).emit("gameStarted");
+    io.to(roomId).emit("phaseUpdate", room.phase);
   });
 
-  // Voting
+  // Mafia voting
+  socket.on("mafiaVote", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    room.mafiaVotes[socket.id] = targetId;
+
+    const mafiaPlayers = room.players.filter(p => room.roles[p.id] === "mafia" && !p.dead);
+
+    if (Object.keys(room.mafiaVotes).length >= mafiaPlayers.length) {
+      const tally = {};
+
+      Object.values(room.mafiaVotes).forEach(v => {
+        tally[v] = (tally[v] || 0) + 1;
+      });
+
+      const target = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+
+      room.players.forEach(p => {
+        if (p.id === target) p.dead = true;
+      });
+
+      room.mafiaVotes = {};
+      room.phase = "day";
+
+      const winner = checkWin(room);
+      if (winner) {
+        io.to(roomId).emit("gameOver", winner);
+      } else {
+        io.to(roomId).emit("phaseUpdate", room.phase);
+        io.to(roomId).emit("updatePlayers", room.players);
+      }
+    }
+  });
+
+  // Day voting
   socket.on("vote", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -87,26 +133,36 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("voteUpdate", room.votes);
   });
 
-  // Voice signaling (WebRTC)
-  socket.on("voiceOffer", (data) => {
-    socket.to(data.roomId).emit("voiceOffer", data);
+  socket.on("endDay", (roomId) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    let tally = {};
+    Object.values(room.votes).forEach(v => {
+      tally[v] = (tally[v] || 0) + 1;
+    });
+
+    const eliminated = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+
+    room.players.forEach(p => {
+      if (p.id === eliminated) p.dead = true;
+    });
+
+    room.votes = {};
+    room.phase = "night";
+
+    const winner = checkWin(room);
+    if (winner) {
+      io.to(roomId).emit("gameOver", winner);
+    } else {
+      io.to(roomId).emit("phaseUpdate", room.phase);
+      io.to(roomId).emit("updatePlayers", room.players);
+    }
   });
 
-  socket.on("voiceAnswer", (data) => {
-    socket.to(data.roomId).emit("voiceAnswer", data);
-  });
-
-  socket.on("iceCandidate", (data) => {
-    socket.to(data.roomId).emit("iceCandidate", data);
-  });
-
-  // Disconnect
   socket.on("disconnect", () => {
     for (let roomId in rooms) {
-      rooms[roomId].players = rooms[roomId].players.filter(
-        (p) => p.id !== socket.id
-      );
-
+      rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
       io.to(roomId).emit("updatePlayers", rooms[roomId].players);
     }
   });
