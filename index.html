@@ -11,91 +11,28 @@ body {
     background: #0f0f0f;
     color: white;
 }
-
-.container {
-    display: flex;
-    height: 100vh;
-}
-
-.sidebar {
-    width: 250px;
-    background: #1a1a1a;
-    padding: 10px;
-    border-right: 1px solid #333;
-}
-
-.player {
-    padding: 10px;
-    margin: 5px 0;
-    background: #222;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    transition: 0.3s;
-}
-
-.player:hover {
-    background: #333;
-    transform: scale(1.05);
-}
-
-.main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.top {
-    padding: 10px;
-    background: #111;
-    border-bottom: 1px solid #333;
-}
-
-.chat {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-}
-
-.bottom {
-    padding: 10px;
-    background: #111;
-    display: flex;
-    gap: 10px;
-}
-
-button {
-    padding: 10px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
+.container { display: flex; height: 100vh; }
+.sidebar { width: 250px; background: #1a1a1a; padding: 10px; }
+.player { padding: 10px; margin: 5px 0; background: #222; border-radius: 8px; display:flex; gap:10px; }
+.main { flex: 1; display: flex; flex-direction: column; }
+.top { padding: 10px; background: #111; }
+.bottom { padding: 10px; background: #111; display: flex; gap: 10px; }
 #talk-btn { background: #27ae60; }
-#mute-btn { background: #e74c3c; }
 </style>
 </head>
 
 <body>
 
 <div class="container">
-
 <div class="sidebar" id="players"></div>
 
 <div class="main">
-    <div class="top">
-        <span id="phase">مرحلة: انتظار</span>
-    </div>
+<div class="top"><span id="phase">انتظار</span></div>
 
-    <div class="chat" id="chat"></div>
-
-    <div class="bottom">
-        <button id="talk-btn">🎤 اضغط وتكلم</button>
-        <button id="mute-btn" onclick="toggleMute()">🔇 كتم</button>
-    </div>
+<div class="bottom">
+<button id="talk-btn">🎤 اضغط وتكلم</button>
 </div>
-
+</div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -109,8 +46,6 @@ socket.emit('join-room', { user: myName, room: myRoom, pass: "1234" });
 
 let myRole = null;
 let currentPhase = "waiting";
-let isAlive = true;
-let isMuted = false;
 
 let localStream;
 let peerConnections = {};
@@ -126,7 +61,7 @@ socket.on('your-role', (role) => {
 
 socket.on('phase-change', (data) => {
     currentPhase = data.phase;
-    document.getElementById('phase').innerText = "مرحلة: " + data.phase;
+    document.getElementById('phase').innerText = data.phase;
     stopVoice();
 });
 
@@ -137,61 +72,49 @@ socket.on('players-update', (players) => {
     players.forEach(p => {
         const el = document.createElement('div');
         el.className = "player";
-        el.innerHTML = `
-            <img src="${p.avatar}" width="30" style="border-radius:50%">
-            ${p.name} ${p.alive ? "" : "💀"}
-        `;
+        el.innerHTML = `<img src="${p.avatar}" width="30"> ${p.name}`;
         div.appendChild(el);
     });
 });
 
-function canSpeak() {
-    if (!isAlive) return false;
-    if (isMuted) return false;
-    if (currentPhase === "night" && myRole !== "mafia") return false;
-    return true;
-}
+window.onload = () => {
+    const btn = document.getElementById('talk-btn');
 
-// 🎤 Push to talk
-const btn = document.getElementById('talk-btn');
-
-btn.onmousedown = startTalking;
-btn.onmouseup = stopVoice;
-btn.ontouchstart = startTalking;
-btn.ontouchend = stopVoice;
+    btn.onmousedown = startTalking;
+    btn.onmouseup = stopVoice;
+};
 
 async function startTalking() {
     if (talking) return;
-    if (!canSpeak()) return alert("لا يمكنك التحدث");
 
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+        alert("افتح الميكروفون");
+        return;
+    }
 
     socket.emit('ready', { room: myRoom });
 
     talking = true;
-    btn.innerText = "🔴 تتكلم...";
 }
 
 function stopVoice() {
     if (!talking) return;
 
-    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+    }
+
     Object.values(peerConnections).forEach(pc => pc.close());
     peerConnections = {};
 
     talking = false;
-    btn.innerText = "🎤 اضغط وتكلم";
-}
-
-// 🔇 Mute
-function toggleMute() {
-    isMuted = !isMuted;
-    alert(isMuted ? "🔇 مكتوم" : "🔊 مسموع");
 }
 
 // WebRTC
 socket.on('ready', async (data) => {
-    if (!canSpeak()) return;
+    if (!localStream) return;
 
     const pc = new RTCPeerConnection(config);
     peerConnections[data.from] = pc;
@@ -201,7 +124,6 @@ socket.on('ready', async (data) => {
     pc.ontrack = (e) => {
         const audio = new Audio();
         audio.srcObject = e.streams[0];
-        audio.volume = 0.7;
         audio.play();
     };
 
@@ -221,19 +143,14 @@ socket.on('offer', async (data) => {
     const pc = new RTCPeerConnection(config);
     peerConnections[data.from] = pc;
 
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
 
     pc.ontrack = (e) => {
         const audio = new Audio();
         audio.srcObject = e.streams[0];
-        audio.volume = 0.7;
         audio.play();
-    };
-
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            socket.emit('ice-candidate', { room: myRoom, candidate: e.candidate });
-        }
     };
 
     await pc.setRemoteDescription(data.offer);
