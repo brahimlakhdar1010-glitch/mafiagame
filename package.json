@@ -1,10 +1,9 @@
 {
   "name": "mafialakhdar-v2",
   "version": "2.0.0",
+  "description": "Mafia Game with Voice Chat",
   "main": "app.js",
-  "scripts": {
-    "start": "node app.js"
-  },
+  "scripts": { "start": "node app.js" },
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2"
