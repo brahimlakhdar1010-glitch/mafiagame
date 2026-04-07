@@ -1,41 +1,41 @@
 <!DOCTYPE html>
-<html>
+<html dir="rtl">
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.tailwindcss.com"></script>
-<title>Mafia Game Pro</title>
+<title>لعبة مافيا برو</title>
 </head>
 
-<body class="bg-gray-900 text-white p-6">
+<body class="bg-gray-900 text-white p-6 text-right">
 
 <div class="max-w-xl mx-auto text-center">
 
-<h1 class="text-3xl font-bold mb-4">🎭 Mafia Game Pro</h1>
+<h1 class="text-3xl font-bold mb-4">🎭 لعبة مافيا برو</h1>
 
 <div id="setup-area">
-<input id="username" class="p-2 m-1 text-black" placeholder="Username" />
-<input id="password" class="p-2 m-1 text-black" placeholder="Password" />
+<input id="username" class="p-2 m-1 text-black text-right" placeholder="اسم المستخدم" />
+<input id="password" class="p-2 m-1 text-black text-right" placeholder="كلمة المرور" />
 
 <br>
 
-<button onclick="createRoom()" class="bg-blue-500 px-4 py-2 m-2 rounded">Create Room</button>
+<button onclick="createRoom()" class="bg-blue-500 px-4 py-2 m-2 rounded">إنشاء غرفة</button>
 
 <br><br>
 
-<input id="roomId" class="p-2 text-black" placeholder="Room ID" />
-<button onclick="joinRoom()" class="bg-green-500 px-4 py-2 m-2 rounded">Join Room</button>
+<input id="roomId" class="p-2 text-black text-right" placeholder="رقم الغرفة" />
+<button onclick="joinRoom()" class="bg-green-500 px-4 py-2 m-2 rounded">انضمام للغرفة</button>
 </div>
 
 <hr class="my-4">
 
-<h2 class="text-xl">Phase: <span id="phase">Lobby</span></h2>
+<h2 class="text-xl">المرحلة الحالية: <span id="phase">الانتظار</span></h2>
 <div id="my-role" class="text-2xl font-bold text-yellow-400 my-2"></div>
 
 <ul id="players" class="mt-4"></ul>
 
-<div id="controls" class="mt-4 space-x-2">
-<button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">Start</button>
-<button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">End Day</button>
+<div id="controls" class="mt-4 space-x-2 space-x-reverse">
+<button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">بدء اللعبة</button>
+<button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">إنهاء اليوم</button>
 </div>
 
 </div>
@@ -72,7 +72,7 @@ function endDay() {
 
 socket.on("roomCreated", d => {
   currentRoom = d.roomId; 
-  alert("Room ID: " + d.roomId);
+  alert("تم إنشاء الغرفة بنجاح! رقم الغرفة هو: " + d.roomId);
 });
 
 socket.on("updatePlayers", players => {
@@ -81,26 +81,51 @@ socket.on("updatePlayers", players => {
 
   players.forEach(p => {
     const li = document.createElement("li");
-    li.textContent = p.username + (p.dead ? " ☠" : "");
+    li.className = "py-1 border-b border-gray-700";
+    li.textContent = p.username + (p.dead ? " ☠ (ميت)" : "");
     list.appendChild(li);
   });
 });
 
 socket.on("phaseUpdate", phase => {
-  document.getElementById("phase").textContent = phase;
+  const phases = {
+    "lobby": "الانتظار",
+    "night": "الليل (وقت التصفية)",
+    "day": "النهار (وقت التصويت)"
+  };
+  document.getElementById("phase").textContent = phases[phase] || phase;
 });
 
 socket.on("roleAssigned", role => {
-  alert("Your role: " + role);
-  // تحديث الواجهة: إظهار الدور وإخفاء أدوات الدخول
-  document.getElementById("my-role").textContent = "Your Role: " + role.toUpperCase();
+  const roles = {
+    "mafia": "مافيا 👿",
+    "doctor": "طبيب 👨‍⚕️",
+    "police": "شرطي 👮",
+    "citizen": "مواطن 👤"
+  };
+  const roleName = roles[role] || role;
+  alert("دورك في هذه اللعبة هو: " + roleName);
+  document.getElementById("my-role").textContent = "دورك: " + roleName;
   document.getElementById("setup-area").style.display = "none";
   document.getElementById("controls").style.display = "none";
 });
 
 socket.on("gameOver", winner => {
-  alert("Winner: " + winner);
-  location.reload(); // إعادة تحميل الصفحة عند انتهاء اللعبة
+  const winners = {
+    "citizens": "المواطنين والأبرياء!",
+    "mafia": "عصابة المافيا!"
+  };
+  alert("انتهت اللعبة! الفائز هو: " + (winners[winner] || winner));
+  location.reload(); 
+});
+
+socket.on("errorMsg", msg => {
+  const errors = {
+    "Room not found": "الغرفة غير موجودة",
+    "Wrong password": "كلمة المرور خاطئة",
+    "Game already started": "اللعبة بدأت بالفعل"
+  };
+  alert(errors[msg] || msg);
 });
 </script>
 
