@@ -6,6 +6,7 @@
 <title>لعبة مافيا برو</title>
 <style>
     .dead { opacity: 0.5; pointer-events: none; text-decoration: line-through; }
+    #chat-box { height: 200px; overflow-y: auto; }
 </style>
 </head>
 <body class="bg-gray-900 text-white p-6 text-right">
@@ -32,6 +33,15 @@
     <div id="game-board" class="mt-4">
         <h3 class="font-bold mb-2">قائمة اللاعبين (اختر هدفا):</h3>
         <ul id="players-list" class="space-y-2"></ul>
+    </div>
+
+    <div id="chat-area" class="mt-6 bg-gray-800 rounded p-4 text-right hidden">
+        <h3 class="font-bold mb-2 border-b border-gray-700 pb-1">الدردشة العامة 💬</h3>
+        <div id="chat-box" class="text-sm space-y-1 mb-2"></div>
+        <div class="flex gap-2">
+            <input id="chat-input" type="text" class="flex-1 p-2 rounded text-black" placeholder="اكتب رسالتك هنا..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()" class="bg-blue-600 px-4 py-2 rounded">إرسال</button>
+        </div>
     </div>
 
     <div id="controls" class="mt-4 space-x-2 space-x-reverse hidden">
@@ -83,7 +93,11 @@ socket.on("updatePlayers", players => {
     list.innerHTML = "";
     
     const me = players.find(p => p.id === myId);
-    if (me && me.dead) isDead = true;
+    if (me && me.dead) {
+        isDead = true;
+        document.getElementById("chat-input").disabled = true;
+        document.getElementById("chat-input").placeholder = "لا يمكنك التحدث وأنت ميت...";
+    }
 
     players.forEach(p => {
         const li = document.createElement("li");
@@ -110,6 +124,24 @@ socket.on("updatePlayers", players => {
     });
 });
 
+// وظائف الدردشة
+function sendMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value.trim();
+    if (msg && !isDead && currentRoom) {
+        socket.emit("chatMessage", { roomId: currentRoom, msg: msg });
+        input.value = "";
+    }
+}
+
+socket.on("receiveMessage", data => {
+    const box = document.getElementById("chat-box");
+    const div = document.createElement("div");
+    div.innerHTML = `<span class="text-yellow-400 font-bold">${data.user}:</span> <span>${data.msg}</span>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+});
+
 function sendAction(targetId, type) {
     socket.emit("action", { roomId: currentRoom, targetId, type });
     alert("تم تنفيذ المهمة لليلة!");
@@ -134,6 +166,7 @@ socket.on("roleAssigned", role => {
     document.getElementById("setup-area").classList.add("hidden");
     document.getElementById("controls").classList.remove("hidden");
     document.getElementById("start-btn").classList.add("hidden");
+    document.getElementById("chat-area").classList.remove("hidden"); // إظهار الدردشة عند البدء
 });
 
 function createRoom() {
@@ -144,6 +177,7 @@ function createRoom() {
 function joinRoom() { 
     currentRoom = document.getElementById("roomId").value; 
     socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value }); 
+    document.getElementById("chat-area").classList.remove("hidden"); // إظهار الدردشة للمنضمين أيضاً
 }
 
 function startGame() { socket.emit("startGame", currentRoom); }
