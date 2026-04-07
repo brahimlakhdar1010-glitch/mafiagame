@@ -22,28 +22,33 @@ io.on('connection', (socket) => {
             rooms[roomID] = {
                 password: pass,
                 players: [],
-                phase: 'waiting',
-                votes: {},
-                nightActions: {}
+                phase: 'waiting'
             };
         }
 
         if (rooms[roomID].password !== pass)
-            return socket.emit('error-msg', 'كلمة السر خاطئة!');
+            return socket.emit('error-msg', 'كلمة السر خاطئة');
 
-        const player = { id: socket.id, name: user, role: 'citizen', alive: true, muted: false };
+        const player = {
+            id: socket.id,
+            name: user,
+            role: 'citizen',
+            alive: true,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`
+        };
+
         rooms[roomID].players.push(player);
         socket.join(roomID);
 
         socket.emit('joined');
-        io.to(roomID).emit('sys-msg', `${user} دخل`);
+        io.to(roomID).emit('players-update', rooms[roomID].players);
 
         if (rooms[roomID].players.length >= 4 && rooms[roomID].phase === 'waiting') {
-            assignRoles(roomID);
+            startGame(roomID);
         }
     });
 
-    // 🔊 WebRTC Signaling
+    // WebRTC
     socket.on('ready', (data) => {
         socket.to(data.room).emit('ready', { from: socket.id });
     });
@@ -60,28 +65,21 @@ io.on('connection', (socket) => {
         socket.to(data.room).emit('ice-candidate', { candidate: data.candidate, from: socket.id });
     });
 
-    socket.on('toggle-mute', (data) => {
-        const room = rooms[data.room];
-        const player = room.players.find(p => p.id === socket.id);
-        if (player) {
-            player.muted = !player.muted;
-        }
-    });
-
     socket.on('disconnect', () => {
         for (let roomID in rooms) {
             rooms[roomID].players = rooms[roomID].players.filter(p => p.id !== socket.id);
+            io.to(roomID).emit('players-update', rooms[roomID].players);
         }
     });
 });
 
-function assignRoles(roomID) {
+function startGame(roomID) {
     const room = rooms[roomID];
-    const players = room.players;
+    room.phase = 'day';
 
-    players[0].role = 'mafia';
+    room.players[0].role = 'mafia';
 
-    players.forEach(p => {
+    room.players.forEach(p => {
         io.to(p.id).emit('your-role', p.role);
     });
 
@@ -91,7 +89,11 @@ function assignRoles(roomID) {
 function startDay(roomID) {
     const room = rooms[roomID];
     room.phase = 'day';
-    io.to(roomID).emit('phase-change', { phase: 'day' });
+
+    io.to(roomID).emit('phase-change', {
+        phase: 'day',
+        players: room.players
+    });
 
     setTimeout(() => startNight(roomID), 30000);
 }
@@ -99,7 +101,11 @@ function startDay(roomID) {
 function startNight(roomID) {
     const room = rooms[roomID];
     room.phase = 'night';
-    io.to(roomID).emit('phase-change', { phase: 'night' });
+
+    io.to(roomID).emit('phase-change', {
+        phase: 'night',
+        players: room.players
+    });
 
     setTimeout(() => startDay(roomID), 20000);
 }
