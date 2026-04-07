@@ -2,174 +2,103 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<title>Mafia Pro</title>
+<title>Mafia Game</title>
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #0f0f0f;
-    color: white;
-}
-.container { display: flex; height: 100vh; }
-.sidebar { width: 250px; background: #1a1a1a; padding: 10px; }
-.player { padding: 10px; margin: 5px 0; background: #222; border-radius: 8px; display:flex; gap:10px; }
-.main { flex: 1; display: flex; flex-direction: column; }
-.top { padding: 10px; background: #111; }
-.bottom { padding: 10px; background: #111; display: flex; gap: 10px; }
-#talk-btn { background: #27ae60; }
+body { font-family: Arial; background:#111; color:white; text-align:center; }
+.card { background:#222; padding:20px; border-radius:10px; margin:10px auto; width:300px; }
+button { padding:10px; margin:5px; }
 </style>
 </head>
 
 <body>
 
-<div class="container">
-<div class="sidebar" id="players"></div>
+<div id="login" class="card">
+<h2>🎮 لعبة المافيا</h2>
 
-<div class="main">
-<div class="top"><span id="phase">انتظار</span></div>
+<p>
+🔴 القوانين:<br>
+- الليل: المافيا تقتل، الطبيب يحمي، المحقق يكشف<br>
+- النهار: نقاش + تصويت<br>
+</p>
 
-<div class="bottom">
-<button id="talk-btn">🎤 اضغط وتكلم</button>
+<input id="name" placeholder="اسمك"><br>
+<input id="room" placeholder="رقم الغرفة"><br>
+<input id="pass" placeholder="كلمة السر"><br>
+
+<button onclick="join()">دخول</button>
 </div>
-</div>
+
+<div id="game" class="card" style="display:none;">
+<h3 id="role"></h3>
+<h3 id="phase"></h3>
+<h2 id="timer"></h2>
+
+<div id="players"></div>
+
+<input id="target" placeholder="ID الهدف">
+<button onclick="action()">تنفيذ</button>
+<button onclick="vote()">تصويت</button>
+
+<div id="log"></div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+let room;
 
-let myRoom = prompt("رقم الغرفة");
-let myName = prompt("اسمك");
+function join(){
+    room = document.getElementById('room').value;
 
-socket.emit('join-room', { user: myName, room: myRoom, pass: "1234" });
-
-let myRole = null;
-let currentPhase = "waiting";
-
-let localStream;
-let peerConnections = {};
-let talking = false;
-
-const config = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-};
-
-socket.on('your-role', (role) => {
-    myRole = role;
-});
-
-socket.on('phase-change', (data) => {
-    currentPhase = data.phase;
-    document.getElementById('phase').innerText = data.phase;
-    stopVoice();
-});
-
-socket.on('players-update', (players) => {
-    const div = document.getElementById('players');
-    div.innerHTML = "";
-
-    players.forEach(p => {
-        const el = document.createElement('div');
-        el.className = "player";
-        el.innerHTML = `<img src="${p.avatar}" width="30"> ${p.name}`;
-        div.appendChild(el);
+    socket.emit('join-room',{
+        user: document.getElementById('name').value,
+        room: room,
+        pass: document.getElementById('pass').value
     });
-});
 
-window.onload = () => {
-    const btn = document.getElementById('talk-btn');
-
-    btn.onmousedown = startTalking;
-    btn.onmouseup = stopVoice;
-};
-
-async function startTalking() {
-    if (talking) return;
-
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-        alert("افتح الميكروفون");
-        return;
-    }
-
-    socket.emit('ready', { room: myRoom });
-
-    talking = true;
+    document.getElementById('login').style.display='none';
+    document.getElementById('game').style.display='block';
 }
 
-function stopVoice() {
-    if (!talking) return;
+socket.on('role', r=>{
+    document.getElementById('role').innerText="دورك: "+r;
+});
 
-    if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
-    }
+socket.on('phase', p=>{
+    document.getElementById('phase').innerText="مرحلة: "+p;
+});
 
-    Object.values(peerConnections).forEach(pc => pc.close());
-    peerConnections = {};
+socket.on('timer', t=>{
+    document.getElementById('timer').innerText=t;
+});
 
-    talking = false;
+socket.on('players', p=>{
+    document.getElementById('players').innerText=
+        p.map(x=>x.name+(x.alive?"":"💀")).join("\n");
+});
+
+socket.on('msg', m=>{
+    document.getElementById('log').innerHTML+=`<p>${m}</p>`;
+});
+
+socket.on('end', m=>{
+    alert(m);
+});
+
+function action(){
+    socket.emit('action',{
+        room:room,
+        target:document.getElementById('target').value
+    });
 }
 
-// WebRTC
-socket.on('ready', async (data) => {
-    if (!localStream) return;
-
-    const pc = new RTCPeerConnection(config);
-    peerConnections[data.from] = pc;
-
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.ontrack = (e) => {
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.play();
-    };
-
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            socket.emit('ice-candidate', { room: myRoom, candidate: e.candidate });
-        }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    socket.emit('offer', { room: myRoom, offer });
-});
-
-socket.on('offer', async (data) => {
-    const pc = new RTCPeerConnection(config);
-    peerConnections[data.from] = pc;
-
-    if (localStream) {
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
-
-    pc.ontrack = (e) => {
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.play();
-    };
-
-    await pc.setRemoteDescription(data.offer);
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    socket.emit('answer', { room: myRoom, answer });
-});
-
-socket.on('answer', async (data) => {
-    const pc = peerConnections[data.from];
-    if (pc) await pc.setRemoteDescription(data.answer);
-});
-
-socket.on('ice-candidate', async (data) => {
-    const pc = peerConnections[data.from];
-    if (pc && data.candidate) await pc.addIceCandidate(data.candidate);
-});
+function vote(){
+    socket.emit('vote',{
+        room:room,
+        target:document.getElementById('target').value
+    });
+}
 </script>
 
 </body>
