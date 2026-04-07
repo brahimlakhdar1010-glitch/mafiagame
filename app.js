@@ -1,12 +1,18 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const path = require("path"); // تم إضافة هذا السطر للتعامل مع المسارات
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static("public"));
+
+// التعديل: هذا الجزء يحل مشكلة Cannot GET / ويقوم بعرض ملف الواجهة
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 let rooms = {};
 
