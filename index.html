@@ -4,14 +4,16 @@
 <meta charset="UTF-8">
 <script src="https://cdn.tailwindcss.com"></script>
 <title>لعبة مافيا برو</title>
+<style>
+    .dead { opacity: 0.5; pointer-events: none; text-decoration: line-through; }
+</style>
 </head>
 <body class="bg-gray-900 text-white p-6 text-right">
 <div class="max-w-xl mx-auto text-center">
     <h1 class="text-3xl font-bold mb-4">🎭 لعبة مافيا برو</h1>
     
-    <div id="timer-display" class="hidden text-4xl font-mono text-red-500 mb-4 bg-black p-2 rounded shadow-lg border-2 border-red-900">
-        00:00
-    </div>
+    <div id="timer-display" class="hidden text-4xl font-mono text-red-500 mb-4 bg-black p-2 rounded shadow-lg border-2 border-red-900">00:00</div>
+    <div id="news-bar" class="bg-blue-900 p-2 my-2 rounded hidden italic"></div>
 
     <div id="setup-area">
         <input id="username" class="p-2 m-1 text-black text-right" placeholder="اسم المستخدم" />
@@ -24,86 +26,119 @@
     </div>
 
     <hr class="my-4">
-    <h2 class="text-xl">المرحلة الحالية: <span id="phase">الانتظار</span></h2>
+    <h2 class="text-xl">المرحلة الحالية: <span id="phase-text">الانتظار</span></h2>
     <div id="my-role" class="text-2xl font-bold text-yellow-400 my-2"></div>
-    <ul id="players" class="mt-4"></ul>
+    
+    <div id="game-board" class="mt-4">
+        <h3 class="font-bold mb-2">قائمة اللاعبين (اختر هدفا):</h3>
+        <ul id="players-list" class="space-y-2"></ul>
+    </div>
 
-    <div id="controls" class="mt-4 space-x-2 space-x-reverse">
-        <button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">بدء اللعبة</button>
-        <button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">إنهاء اليوم</button>
+    <div id="controls" class="mt-4 space-x-2 space-x-reverse hidden">
+        <button id="start-btn" onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">بدء اللعبة</button>
+        <button onclick="endDay()" class="bg-yellow-600 px-3 py-1 rounded">إنهاء التصويت مبكراً</button>
     </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-let currentRoom;
+let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
 
-// دالة لتحويل الثواني إلى تنسيق دقائق:ثواني
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+socket.on("connect", () => { myId = socket.id; });
+
 socket.on("timerUpdate", (timeLeft) => {
     const timerDiv = document.getElementById("timer-display");
     timerDiv.classList.remove("hidden");
     timerDiv.textContent = formatTime(timeLeft);
-    if(timeLeft <= 10) timerDiv.classList.add("animate-pulse");
-    else timerDiv.classList.remove("animate-pulse");
+});
+
+socket.on("newsUpdate", msg => {
+    const bar = document.getElementById("news-bar");
+    bar.classList.remove("hidden");
+    bar.textContent = msg;
+    setTimeout(() => bar.classList.add("hidden"), 10000);
 });
 
 socket.on("phaseUpdate", phase => {
-    const phases = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
-    document.getElementById("phase").textContent = phases[phase] || phase;
-});
-
-// باقي الدوال الخاصة بك (createRoom, joinRoom, الخ...) كما هي
-
-function createRoom() {
-  socket.emit("createRoom", {
-    username: document.getElementById("username").value,
-    password: document.getElementById("password").value
-  });
-}
-
-function joinRoom() {
-  currentRoom = document.getElementById("roomId").value;
-  socket.emit("joinRoom", {
-    roomId: currentRoom,
-    username: document.getElementById("username").value,
-    password: document.getElementById("password").value
-  });
-}
-
-function startGame() { socket.emit("startGame", currentRoom); }
-function endDay() { socket.emit("endDay", currentRoom); }
-
-socket.on("roomCreated", d => {
-  currentRoom = d.roomId; 
-  alert("تم إنشاء الغرفة! رقمها: " + d.roomId);
+    currentPhase = phase;
+    const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
+    document.getElementById("phase-text").textContent = pText[phase];
+    refreshUI();
 });
 
 socket.on("updatePlayers", players => {
-  const list = document.getElementById("players");
-  list.innerHTML = "";
-  players.forEach(p => {
-    const li = document.createElement("li");
-    li.textContent = p.username + (p.dead ? " ☠" : "");
-    list.appendChild(li);
-  });
+    const list = document.getElementById("players-list");
+    list.innerHTML = "";
+    
+    const me = players.find(p => p.id === myId);
+    if (me && me.dead) isDead = true;
+
+    players.forEach(p => {
+        const li = document.createElement("li");
+        li.className = `flex justify-between items-center p-2 bg-gray-800 rounded ${p.dead ? 'dead' : ''}`;
+        li.innerHTML = `<span>${p.username} ${p.dead ? '☠' : ''}</span>`;
+        
+        // إضافة أزرار الأكشن بناء على المرحلة والدور
+        if (!isDead && !p.dead && currentPhase !== "lobby") {
+            const btn = document.createElement("button");
+            btn.className = "bg-red-700 px-2 py-1 rounded text-sm";
+            
+            if (currentPhase === "night") {
+                if (myRole === "mafia") { btn.textContent = "اغتيال"; btn.onclick = () => sendAction(p.id, 'mafia'); }
+                else if (myRole === "doctor") { btn.textContent = "حماية"; btn.onclick = () => sendAction(p.id, 'doctor'); }
+                else if (myRole === "police") { btn.textContent = "تحقيق"; btn.onclick = () => sendAction(p.id, 'police'); }
+                else { btn.style.display = "none"; }
+            } else if (currentPhase === "day") {
+                btn.textContent = "تصويت";
+                btn.className = "bg-blue-600 px-2 py-1 rounded text-sm";
+                btn.onclick = () => sendVote(p.id);
+            }
+            li.appendChild(btn);
+        }
+        list.appendChild(li);
+    });
 });
+
+function sendAction(targetId, type) {
+    socket.emit("action", { roomId: currentRoom, targetId, type });
+    alert("تم تنفيذ المهمة لليلة!");
+}
+
+function sendVote(targetId) {
+    socket.emit("vote", { roomId: currentRoom, targetId });
+    alert("تم تسجيل صوتك!");
+}
+
+function refreshUI() {
+    if (isDead) {
+        document.getElementById("my-role").textContent += " (أنت ميت ☠)";
+        document.getElementById("controls").style.display = "none";
+    }
+}
 
 socket.on("roleAssigned", role => {
-  document.getElementById("my-role").textContent = "دورك: " + role;
-  document.getElementById("setup-area").style.display = "none";
+    myRole = role;
+    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
+    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
+    document.getElementById("setup-area").style.display = "none";
+    document.getElementById("controls").classList.remove("hidden");
+    document.getElementById("start-btn").style.display = "none";
 });
 
-socket.on("gameOver", winner => {
-  alert("الفائز: " + winner);
-  location.reload();
-});
+// الدوال الأساسية
+function createRoom() { socket.emit("createRoom", { username: username.value, password: password.value }); }
+function joinRoom() { currentRoom = roomId.value; socket.emit("joinRoom", { roomId: currentRoom, username: username.value, password: password.value }); }
+function startGame() { socket.emit("startGame", currentRoom); }
+function endDay() { socket.emit("endDay", currentRoom); }
+socket.on("roomCreated", d => { currentRoom = d.roomId; alert("تم إنشاء الغرفة: " + d.roomId); });
+socket.on("gameOver", winner => { alert("انتهت اللعبة! الفائز: " + winner); location.reload(); });
 </script>
 </body>
 </html>
