@@ -103,5 +103,6 @@ function startNight(roomID) {
 
     setTimeout(() => startDay(roomID), 20000);
 }
+const PORT = process.env.PORT || 3000;
+server.listen(PORT);
 
-server.listen(3000);
