@@ -1,131 +1,135 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Mafia</title>
+  <meta charset="UTF-8">
+  <title>Mafia Game Pro</title>
 </head>
 <body>
 
-<input id="user" placeholder="اسمك">
-<input id="room" placeholder="الغرفة">
-<input id="pass" placeholder="كلمة السر">
-<button onclick="join()">دخول</button>
+<h1>Mafia Game Pro 🎭</h1>
 
-<button onclick="toggleMic()">🎤 تشغيل / إيقاف</button>
+<div>
+  <input id="username" placeholder="Username" />
+  <input id="password" placeholder="Password" />
+  <button onclick="createRoom()">Create Room</button>
+</div>
+
+<br>
+
+<div>
+  <input id="roomId" placeholder="Room ID" />
+  <button onclick="joinRoom()">Join Room</button>
+</div>
+
+<hr>
+
+<h3>Players</h3>
+<ul id="players"></ul>
+
+<button onclick="startGame()">Start Game</button>
+<button onclick="enableMic()">🎤 Enable Microphone</button>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+let currentRoom = null;
 
-let myRoom;
+function createRoom() {
+  socket.emit("createRoom", {
+    username: username.value,
+    password: password.value
+  });
+}
+
+function joinRoom() {
+  currentRoom = roomId.value;
+
+  socket.emit("joinRoom", {
+    roomId: currentRoom,
+    username: username.value,
+    password: password.value
+  });
+}
+
+function startGame() {
+  socket.emit("startGame", currentRoom);
+}
+
+socket.on("roomCreated", (data) => {
+  currentRoom = data.roomId;
+  alert("Room ID: " + currentRoom);
+});
+
+socket.on("updatePlayers", (players) => {
+  const list = document.getElementById("players");
+  list.innerHTML = "";
+
+  players.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = p.username;
+    list.appendChild(li);
+  });
+});
+
+socket.on("roleAssigned", (role) => {
+  alert("Your role: " + role);
+});
+
+socket.on("errorMsg", (msg) => alert(msg));
+
+/* ================= Voice ================= */
+
 let localStream;
 let peerConnections = {};
-let micActive = false;
-
 const config = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
-function join() {
-    myRoom = document.getElementById('room').value;
-    socket.emit('join-room', {
-        user: document.getElementById('user').value,
-        room: myRoom,
-        pass: document.getElementById('pass').value
-    });
+async function enableMic() {
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  alert("Microphone enabled 🎤");
 }
 
-async function toggleMic() {
-    if (!micActive) {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+socket.on("voiceOffer", async (data) => {
+  const pc = new RTCPeerConnection(config);
+  peerConnections[data.from] = pc;
 
-        socket.emit('ready', { room: myRoom });
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-        micActive = true;
-        alert("الميكروفون شغال");
-    } else {
-        localStream.getTracks().forEach(t => t.stop());
-        Object.values(peerConnections).forEach(pc => pc.close());
-        peerConnections = {};
-        micActive = false;
-        alert("الميكروفون توقف");
+  pc.onicecandidate = e => {
+    if (e.candidate) {
+      socket.emit("iceCandidate", {
+        roomId: currentRoom,
+        candidate: e.candidate
+      });
     }
-}
+  };
 
-socket.on('ready', async (data) => {
-    const pc = new RTCPeerConnection(config);
-    peerConnections[data.from] = pc;
+  pc.ontrack = e => {
+    const audio = document.createElement("audio");
+    audio.srcObject = e.streams[0];
+    audio.autoplay = true;
+    document.body.appendChild(audio);
+  };
 
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  await pc.setRemoteDescription(data.offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
 
-    pc.ontrack = (e) => {
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.play();
-    };
-
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            socket.emit('ice-candidate', {
-                room: myRoom,
-                candidate: e.candidate
-            });
-        }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    socket.emit('offer', {
-        room: myRoom,
-        offer: offer
-    });
+  socket.emit("voiceAnswer", {
+    roomId: currentRoom,
+    answer
+  });
 });
 
-socket.on('offer', async (data) => {
-    const pc = new RTCPeerConnection(config);
-    peerConnections[data.from] = pc;
-
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.ontrack = (e) => {
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.play();
-    };
-
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            socket.emit('ice-candidate', {
-                room: myRoom,
-                candidate: e.candidate
-            });
-        }
-    };
-
-    await pc.setRemoteDescription(data.offer);
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    socket.emit('answer', {
-        room: myRoom,
-        answer: answer
-    });
+socket.on("voiceAnswer", async (data) => {
+  const pc = peerConnections[data.from];
+  if (pc) await pc.setRemoteDescription(data.answer);
 });
 
-socket.on('answer', async (data) => {
-    const pc = peerConnections[data.from];
-    if (pc) {
-        await pc.setRemoteDescription(data.answer);
-    }
-});
-
-socket.on('ice-candidate', async (data) => {
-    const pc = peerConnections[data.from];
-    if (pc && data.candidate) {
-        await pc.addIceCandidate(data.candidate);
-    }
+socket.on("iceCandidate", async (data) => {
+  const pc = peerConnections[data.from];
+  if (pc) await pc.addIceCandidate(data.candidate);
 });
 </script>
 
