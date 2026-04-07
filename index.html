@@ -30,8 +30,16 @@ let myRole = null;
 let isAlive = true;
 let isMuted = false;
 
+// ✅ التعديل هنا فقط (إضافة TURN)
 const config = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject"
+        }
+    ]
 };
 
 function join() {
@@ -50,7 +58,6 @@ socket.on('your-role', (role) => {
 socket.on('phase-change', (data) => {
     currentPhase = data.phase;
 
-    // auto mute
     if (micActive) stopMic();
 });
 
@@ -105,6 +112,8 @@ socket.on('ready', async (data) => {
     pc.ontrack = (e) => {
         const audio = new Audio();
         audio.srcObject = e.streams[0];
+        audio.autoplay = true;        // ✅ إضافة مهمة
+        audio.playsInline = true;     // ✅ إضافة مهمة
         audio.play();
     };
 
@@ -129,6 +138,8 @@ socket.on('offer', async (data) => {
     pc.ontrack = (e) => {
         const audio = new Audio();
         audio.srcObject = e.streams[0];
+        audio.autoplay = true;        // ✅ إضافة مهمة
+        audio.playsInline = true;     // ✅ إضافة مهمة
         audio.play();
     };
 
