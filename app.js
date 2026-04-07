@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
+
 const io = new Server(server, {
     cors: { origin: "*" }
 });
@@ -26,8 +27,9 @@ io.on('connection', (socket) => {
             };
         }
 
-        if (rooms[roomID].password !== pass)
+        if (rooms[roomID].password !== pass) {
             return socket.emit('error-msg', 'كلمة السر خاطئة');
+        }
 
         const player = {
             id: socket.id,
@@ -43,7 +45,7 @@ io.on('connection', (socket) => {
         socket.emit('joined');
         io.to(roomID).emit('players-update', rooms[roomID].players);
 
-        if (rooms[roomID].players.length >= 4 && rooms[roomID].phase === 'waiting') {
+        if (rooms[roomID].players.length >= 2 && rooms[roomID].phase === 'waiting') {
             startGame(roomID);
         }
     });
@@ -110,4 +112,8 @@ function startNight(roomID) {
     setTimeout(() => startDay(roomID), 20000);
 }
 
-server.listen(3000);
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+    console.log("Server running on port " + PORT);
+});
