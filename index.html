@@ -44,18 +44,18 @@ let currentRoom;
 
 function createRoom() {
   socket.emit("createRoom", {
-    username: username.value,
-    password: password.value
+    username: document.getElementById("username").value,
+    password: document.getElementById("password").value
   });
 }
 
 function joinRoom() {
-  currentRoom = roomId.value;
+  currentRoom = document.getElementById("roomId").value;
 
   socket.emit("joinRoom", {
     roomId: currentRoom,
-    username: username.value,
-    password: password.value
+    username: document.getElementById("username").value,
+    password: document.getElementById("password").value
   });
 }
 
@@ -67,7 +67,11 @@ function endDay() {
   socket.emit("endDay", currentRoom);
 }
 
-socket.on("roomCreated", d => alert("Room ID: " + d.roomId));
+// التعديل هنا: حفظ رقم الغرفة في المتغير currentRoom عند إنشائها
+socket.on("roomCreated", d => {
+  currentRoom = d.roomId; 
+  alert("Room ID: " + d.roomId);
+});
 
 socket.on("updatePlayers", players => {
   const list = document.getElementById("players");
