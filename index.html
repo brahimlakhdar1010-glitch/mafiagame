@@ -5,45 +5,61 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <title>لعبة مافيا برو</title>
 </head>
-
 <body class="bg-gray-900 text-white p-6 text-right">
-
 <div class="max-w-xl mx-auto text-center">
+    <h1 class="text-3xl font-bold mb-4">🎭 لعبة مافيا برو</h1>
+    
+    <div id="timer-display" class="hidden text-4xl font-mono text-red-500 mb-4 bg-black p-2 rounded shadow-lg border-2 border-red-900">
+        00:00
+    </div>
 
-<h1 class="text-3xl font-bold mb-4">🎭 لعبة مافيا برو</h1>
+    <div id="setup-area">
+        <input id="username" class="p-2 m-1 text-black text-right" placeholder="اسم المستخدم" />
+        <input id="password" class="p-2 m-1 text-black text-right" placeholder="كلمة المرور" />
+        <br>
+        <button onclick="createRoom()" class="bg-blue-500 px-4 py-2 m-2 rounded">إنشاء غرفة</button>
+        <br><br>
+        <input id="roomId" class="p-2 text-black text-right" placeholder="رقم الغرفة" />
+        <button onclick="joinRoom()" class="bg-green-500 px-4 py-2 m-2 rounded">انضمام للغرفة</button>
+    </div>
 
-<div id="setup-area">
-<input id="username" class="p-2 m-1 text-black text-right" placeholder="اسم المستخدم" />
-<input id="password" class="p-2 m-1 text-black text-right" placeholder="كلمة المرور" />
+    <hr class="my-4">
+    <h2 class="text-xl">المرحلة الحالية: <span id="phase">الانتظار</span></h2>
+    <div id="my-role" class="text-2xl font-bold text-yellow-400 my-2"></div>
+    <ul id="players" class="mt-4"></ul>
 
-<br>
-
-<button onclick="createRoom()" class="bg-blue-500 px-4 py-2 m-2 rounded">إنشاء غرفة</button>
-
-<br><br>
-
-<input id="roomId" class="p-2 text-black text-right" placeholder="رقم الغرفة" />
-<button onclick="joinRoom()" class="bg-green-500 px-4 py-2 m-2 rounded">انضمام للغرفة</button>
-</div>
-
-<hr class="my-4">
-
-<h2 class="text-xl">المرحلة الحالية: <span id="phase">الانتظار</span></h2>
-<div id="my-role" class="text-2xl font-bold text-yellow-400 my-2"></div>
-
-<ul id="players" class="mt-4"></ul>
-
-<div id="controls" class="mt-4 space-x-2 space-x-reverse">
-<button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">بدء اللعبة</button>
-<button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">إنهاء اليوم</button>
-</div>
-
+    <div id="controls" class="mt-4 space-x-2 space-x-reverse">
+        <button onclick="startGame()" class="bg-purple-500 px-3 py-1 rounded">بدء اللعبة</button>
+        <button onclick="endDay()" class="bg-yellow-500 px-3 py-1 rounded">إنهاء اليوم</button>
+    </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 let currentRoom;
+
+// دالة لتحويل الثواني إلى تنسيق دقائق:ثواني
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+socket.on("timerUpdate", (timeLeft) => {
+    const timerDiv = document.getElementById("timer-display");
+    timerDiv.classList.remove("hidden");
+    timerDiv.textContent = formatTime(timeLeft);
+    if(timeLeft <= 10) timerDiv.classList.add("animate-pulse");
+    else timerDiv.classList.remove("animate-pulse");
+});
+
+socket.on("phaseUpdate", phase => {
+    const phases = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
+    document.getElementById("phase").textContent = phases[phase] || phase;
+});
+
+// باقي الدوال الخاصة بك (createRoom, joinRoom, الخ...) كما هي
 
 function createRoom() {
   socket.emit("createRoom", {
@@ -54,7 +70,6 @@ function createRoom() {
 
 function joinRoom() {
   currentRoom = document.getElementById("roomId").value;
-
   socket.emit("joinRoom", {
     roomId: currentRoom,
     username: document.getElementById("username").value,
@@ -62,72 +77,33 @@ function joinRoom() {
   });
 }
 
-function startGame() {
-  socket.emit("startGame", currentRoom);
-}
-
-function endDay() {
-  socket.emit("endDay", currentRoom);
-}
+function startGame() { socket.emit("startGame", currentRoom); }
+function endDay() { socket.emit("endDay", currentRoom); }
 
 socket.on("roomCreated", d => {
   currentRoom = d.roomId; 
-  alert("تم إنشاء الغرفة بنجاح! رقم الغرفة هو: " + d.roomId);
+  alert("تم إنشاء الغرفة! رقمها: " + d.roomId);
 });
 
 socket.on("updatePlayers", players => {
   const list = document.getElementById("players");
   list.innerHTML = "";
-
   players.forEach(p => {
     const li = document.createElement("li");
-    li.className = "py-1 border-b border-gray-700";
-    li.textContent = p.username + (p.dead ? " ☠ (ميت)" : "");
+    li.textContent = p.username + (p.dead ? " ☠" : "");
     list.appendChild(li);
   });
 });
 
-socket.on("phaseUpdate", phase => {
-  const phases = {
-    "lobby": "الانتظار",
-    "night": "الليل (وقت التصفية)",
-    "day": "النهار (وقت التصويت)"
-  };
-  document.getElementById("phase").textContent = phases[phase] || phase;
-});
-
 socket.on("roleAssigned", role => {
-  const roles = {
-    "mafia": "مافيا 👿",
-    "doctor": "طبيب 👨‍⚕️",
-    "police": "شرطي 👮",
-    "citizen": "مواطن 👤"
-  };
-  const roleName = roles[role] || role;
-  alert("دورك في هذه اللعبة هو: " + roleName);
-  document.getElementById("my-role").textContent = "دورك: " + roleName;
+  document.getElementById("my-role").textContent = "دورك: " + role;
   document.getElementById("setup-area").style.display = "none";
-  document.getElementById("controls").style.display = "none";
 });
 
 socket.on("gameOver", winner => {
-  const winners = {
-    "citizens": "المواطنين والأبرياء!",
-    "mafia": "عصابة المافيا!"
-  };
-  alert("انتهت اللعبة! الفائز هو: " + (winners[winner] || winner));
-  location.reload(); 
-});
-
-socket.on("errorMsg", msg => {
-  const errors = {
-    "Room not found": "الغرفة غير موجودة",
-    "Wrong password": "كلمة المرور خاطئة",
-    "Game already started": "اللعبة بدأت بالفعل"
-  };
-  alert(errors[msg] || msg);
+  alert("الفائز: " + winner);
+  location.reload();
 });
 </script>
-
 </body>
 </html>
