@@ -81,7 +81,6 @@ io.on("connection", (socket) => {
 
   socket.on("startGame", (roomId) => {
     const room = rooms[roomId];
-    // التعديل هنا: منع إعادة البدء إذا كانت اللعبة تعمل بالفعل
     if (!room || room.gameStarted) return;
 
     room.gameStarted = true;
@@ -166,12 +165,14 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     for (let roomId in rooms) {
-      rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
-      io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+      if(rooms[roomId]) {
+        rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
+        io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+      }
     }
   });
 });
 
 server.listen(process.env.PORT || 3000, () => {
-  console.log("Server running...");
+  console.log("السيرفر يعمل بنجاح...");
 });
