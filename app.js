@@ -4,116 +4,205 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-const io = new Server(server, {
-    cors: { origin: "*" }
-});
-
-app.use(express.static(__dirname + '/'));
+app.use(express.static(__dirname));
 
 let rooms = {};
 
 io.on('connection', (socket) => {
 
-    socket.on('join-room', (data) => {
-        const roomID = String(data.room);
-        const { user, pass } = data;
+    socket.on('join-room', ({ user, room, pass }) => {
+        room = String(room);
 
-        if (!rooms[roomID]) {
-            rooms[roomID] = {
+        if (!rooms[room]) {
+            rooms[room] = {
                 password: pass,
                 players: [],
-                phase: 'waiting'
+                phase: 'waiting',
+                votes: {},
+                actions: {},
+                interval: null
             };
         }
 
-        if (rooms[roomID].password !== pass) {
-            return socket.emit('error-msg', 'كلمة السر خاطئة');
-        }
+        const r = rooms[room];
+
+        if (r.phase !== 'waiting')
+            return socket.emit('error-msg', "⚠️ اللعبة بدأت");
+
+        if (r.password !== pass)
+            return socket.emit('error-msg', "❌ كلمة السر خاطئة");
 
         const player = {
             id: socket.id,
             name: user,
             role: 'citizen',
-            alive: true,
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user}`
+            alive: true
         };
 
-        rooms[roomID].players.push(player);
-        socket.join(roomID);
+        r.players.push(player);
+        socket.join(room);
 
-        socket.emit('joined');
-        io.to(roomID).emit('players-update', rooms[roomID].players);
+        io.to(room).emit('players', r.players);
 
-        if (rooms[roomID].players.length >= 2 && rooms[roomID].phase === 'waiting') {
-            startGame(roomID);
-        }
+        if (r.players.length >= 4) startCountdown(room);
     });
 
-    // WebRTC
-    socket.on('ready', (data) => {
-        socket.to(data.room).emit('ready', { from: socket.id });
+    socket.on('vote', ({ room, target }) => {
+        const r = rooms[room];
+        if (!r) return;
+
+        r.votes[target] = (r.votes[target] || 0) + 1;
     });
 
-    socket.on('offer', (data) => {
-        socket.to(data.room).emit('offer', { offer: data.offer, from: socket.id });
-    });
+    socket.on('action', ({ room, target }) => {
+        const r = rooms[room];
+        if (!r) return;
 
-    socket.on('answer', (data) => {
-        socket.to(data.room).emit('answer', { answer: data.answer, from: socket.id });
-    });
+        const p = r.players.find(x => x.id === socket.id);
 
-    socket.on('ice-candidate', (data) => {
-        socket.to(data.room).emit('ice-candidate', { candidate: data.candidate, from: socket.id });
-    });
-
-    socket.on('disconnect', () => {
-        for (let roomID in rooms) {
-            rooms[roomID].players = rooms[roomID].players.filter(p => p.id !== socket.id);
-            io.to(roomID).emit('players-update', rooms[roomID].players);
+        if (p.role === 'mafia') r.actions.kill = target;
+        if (p.role === 'doctor') r.actions.save = target;
+        if (p.role === 'detective') {
+            const t = r.players.find(x => x.id === target);
+            socket.emit('detective-result', t.role);
         }
     });
 });
 
-function startGame(roomID) {
-    const room = rooms[roomID];
-    room.phase = 'day';
+function startCountdown(room) {
+    const r = rooms[room];
+    if (r.phase !== 'waiting') return;
 
-    room.players[0].role = 'mafia';
+    r.phase = 'starting';
+    let time = 30;
 
-    room.players.forEach(p => {
-        io.to(p.id).emit('your-role', p.role);
-    });
+    r.interval = setInterval(() => {
+        io.to(room).emit('timer', time);
+        time--;
 
-    startDay(roomID);
+        if (time < 0) {
+            clearInterval(r.interval);
+            assignRoles(room);
+        }
+    }, 1000);
 }
 
-function startDay(roomID) {
-    const room = rooms[roomID];
-    room.phase = 'day';
+function assignRoles(room) {
+    const r = rooms[room];
+    const players = r.players.sort(() => 0.5 - Math.random());
 
-    io.to(roomID).emit('phase-change', {
-        phase: 'day',
-        players: room.players
+    players[0].role = 'mafia';
+    players[1].role = 'doctor';
+    players[2].role = 'detective';
+
+    players.forEach(p => {
+        io.to(p.id).emit('role', p.role);
     });
 
-    setTimeout(() => startNight(roomID), 30000);
+    startNight(room);
 }
 
-function startNight(roomID) {
-    const room = rooms[roomID];
-    room.phase = 'night';
+function startNight(room) {
+    const r = rooms[room];
+    r.phase = 'night';
+    r.actions = {};
 
-    io.to(roomID).emit('phase-change', {
-        phase: 'night',
-        players: room.players
-    });
+    io.to(room).emit('phase', 'night');
 
-    setTimeout(() => startDay(roomID), 20000);
+    let time = 30;
+    r.interval = setInterval(() => {
+        io.to(room).emit('timer', time);
+        time--;
+
+        if (time < 0) {
+            clearInterval(r.interval);
+            processNight(room);
+        }
+    }, 1000);
 }
 
-const PORT = process.env.PORT || 3000;
+function processNight(room) {
+    const r = rooms[room];
 
-server.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
-});
+    let kill = r.actions.kill;
+    let save = r.actions.save;
+
+    if (kill && kill === save) {
+        const p = r.players.find(x => x.id === kill);
+        io.to(room).emit('msg', `🛡️ تم إنقاذ ${p.name}`);
+    } else if (kill) {
+        const p = r.players.find(x => x.id === kill);
+        if (p) {
+            p.alive = false;
+            io.to(room).emit('msg', `💀 مات ${p.name}`);
+        }
+    }
+
+    if (!checkWin(room)) startDay(room);
+}
+
+function startDay(room) {
+    const r = rooms[room];
+    r.phase = 'day';
+    r.votes = {};
+
+    io.to(room).emit('phase', 'day');
+
+    let time = 240;
+    r.interval = setInterval(() => {
+        io.to(room).emit('timer', time);
+        time--;
+
+        if (time < 0) {
+            clearInterval(r.interval);
+            processVotes(room);
+        }
+    }, 1000);
+}
+
+function processVotes(room) {
+    const r = rooms[room];
+
+    let max = 0, target = null;
+
+    for (let id in r.votes) {
+        if (r.votes[id] > max) {
+            max = r.votes[id];
+            target = id;
+        }
+    }
+
+    if (target) {
+        const p = r.players.find(x => x.id === target);
+        if (p) {
+            p.alive = false;
+            io.to(room).emit('msg', `⚖️ تم إعدام ${p.name}`);
+        }
+    }
+
+    if (!checkWin(room)) startNight(room);
+}
+
+function checkWin(room) {
+    const r = rooms[room];
+
+    const alive = r.players.filter(p => p.alive);
+    const mafia = alive.filter(p => p.role === 'mafia').length;
+    const others = alive.length - mafia;
+
+    if (mafia === 0) {
+        io.to(room).emit('end', "🏆 فاز المواطنون!");
+        return true;
+    }
+
+    if (mafia >= others) {
+        io.to(room).emit('end', "💀 فازت المافيا!");
+        return true;
+    }
+
+    return false;
+}
+
+server.listen(process.env.PORT || 3000);
