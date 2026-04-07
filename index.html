@@ -1,104 +1,160 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar">
 <head>
 <meta charset="UTF-8">
-<title>Mafia Game</title>
-
-<style>
-body { font-family: Arial; background:#111; color:white; text-align:center; }
-.card { background:#222; padding:20px; border-radius:10px; margin:10px auto; width:300px; }
-button { padding:10px; margin:5px; }
-</style>
+<title>Mafia Voice Pro</title>
 </head>
-
 <body>
 
-<div id="login" class="card">
-<h2>🎮 لعبة المافيا</h2>
-
-<p>
-🔴 القوانين:<br>
-- الليل: المافيا تقتل، الطبيب يحمي، المحقق يكشف<br>
-- النهار: نقاش + تصويت<br>
-</p>
-
-<input id="name" placeholder="اسمك"><br>
-<input id="room" placeholder="رقم الغرفة"><br>
-<input id="pass" placeholder="كلمة السر"><br>
-
+<input id="user" placeholder="اسمك">
+<input id="room" placeholder="الغرفة">
+<input id="pass" placeholder="كلمة السر">
 <button onclick="join()">دخول</button>
-</div>
 
-<div id="game" class="card" style="display:none;">
-<h3 id="role"></h3>
-<h3 id="phase"></h3>
-<h2 id="timer"></h2>
+<br><br>
 
-<div id="players"></div>
-
-<input id="target" placeholder="ID الهدف">
-<button onclick="action()">تنفيذ</button>
-<button onclick="vote()">تصويت</button>
-
-<div id="log"></div>
-</div>
+<button id="mic-btn" onclick="toggleMic()">🎤 تشغيل</button>
+<button onclick="toggleMute()">🔇 كتم</button>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-let room;
 
-function join(){
-    room = document.getElementById('room').value;
+let myRoom;
+let localStream;
+let peerConnections = {};
+let micActive = false;
 
-    socket.emit('join-room',{
-        user: document.getElementById('name').value,
-        room: room,
+let currentPhase = "waiting";
+let myRole = null;
+let isAlive = true;
+let isMuted = false;
+
+const config = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
+
+function join() {
+    myRoom = document.getElementById('room').value;
+    socket.emit('join-room', {
+        user: document.getElementById('user').value,
+        room: myRoom,
         pass: document.getElementById('pass').value
     });
-
-    document.getElementById('login').style.display='none';
-    document.getElementById('game').style.display='block';
 }
 
-socket.on('role', r=>{
-    document.getElementById('role').innerText="دورك: "+r;
+socket.on('your-role', (role) => {
+    myRole = role;
 });
 
-socket.on('phase', p=>{
-    document.getElementById('phase').innerText="مرحلة: "+p;
+socket.on('phase-change', (data) => {
+    currentPhase = data.phase;
+
+    // auto mute
+    if (micActive) stopMic();
 });
 
-socket.on('timer', t=>{
-    document.getElementById('timer').innerText=t;
-});
-
-socket.on('players', p=>{
-    document.getElementById('players').innerText=
-        p.map(x=>x.name+(x.alive?"":"💀")).join("\n");
-});
-
-socket.on('msg', m=>{
-    document.getElementById('log').innerHTML+=`<p>${m}</p>`;
-});
-
-socket.on('end', m=>{
-    alert(m);
-});
-
-function action(){
-    socket.emit('action',{
-        room:room,
-        target:document.getElementById('target').value
-    });
+function canSpeak() {
+    if (!isAlive) return false;
+    if (isMuted) return false;
+    if (currentPhase === "night" && myRole !== "mafia") return false;
+    return true;
 }
 
-function vote(){
-    socket.emit('vote',{
-        room:room,
-        target:document.getElementById('target').value
-    });
+async function toggleMic() {
+    if (!canSpeak()) {
+        alert("لا يمكنك التحدث الآن");
+        return;
+    }
+
+    if (!micActive) {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        socket.emit('ready', { room: myRoom });
+
+        micActive = true;
+        document.getElementById('mic-btn').innerText = "🎤 يعمل";
+    } else {
+        stopMic();
+    }
 }
+
+function stopMic() {
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+    }
+    Object.values(peerConnections).forEach(pc => pc.close());
+    peerConnections = {};
+    micActive = false;
+    document.getElementById('mic-btn').innerText = "🎤 مغلق";
+}
+
+function toggleMute() {
+    isMuted = !isMuted;
+    socket.emit('toggle-mute', { room: myRoom });
+    alert(isMuted ? "تم الكتم" : "تم فتح الصوت");
+}
+
+// WebRTC
+socket.on('ready', async (data) => {
+    const pc = new RTCPeerConnection(config);
+    peerConnections[data.from] = pc;
+
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.ontrack = (e) => {
+        const audio = new Audio();
+        audio.srcObject = e.streams[0];
+        audio.play();
+    };
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) {
+            socket.emit('ice-candidate', { room: myRoom, candidate: e.candidate });
+        }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socket.emit('offer', { room: myRoom, offer });
+});
+
+socket.on('offer', async (data) => {
+    const pc = new RTCPeerConnection(config);
+    peerConnections[data.from] = pc;
+
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.ontrack = (e) => {
+        const audio = new Audio();
+        audio.srcObject = e.streams[0];
+        audio.play();
+    };
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) {
+            socket.emit('ice-candidate', { room: myRoom, candidate: e.candidate });
+        }
+    };
+
+    await pc.setRemoteDescription(data.offer);
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    socket.emit('answer', { room: myRoom, answer });
+});
+
+socket.on('answer', async (data) => {
+    const pc = peerConnections[data.from];
+    if (pc) await pc.setRemoteDescription(data.answer);
+});
+
+socket.on('ice-candidate', async (data) => {
+    const pc = peerConnections[data.from];
+    if (pc && data.candidate) await pc.addIceCandidate(data.candidate);
+});
 </script>
 
 </body>
