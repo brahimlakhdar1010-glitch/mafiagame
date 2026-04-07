@@ -147,6 +147,16 @@ io.on("connection", (socket) => {
     startTimer(roomId, 30);
   });
 
+  // إضافة نظام استقبال الرسائل وإعادة توجيهها
+  socket.on("chatMessage", ({ roomId, msg }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (player && !player.dead) {
+      io.to(roomId).emit("receiveMessage", { user: player.username, msg: msg });
+    }
+  });
+
   socket.on("action", ({ roomId, targetId, type }) => {
     const room = rooms[roomId];
     if (!room || room.phase !== "night") return;
@@ -154,7 +164,6 @@ io.on("connection", (socket) => {
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
       const targetRole = room.roles[targetId];
-      // تم التعديل هنا ليظهر "مواطن" بدلاً من "بريء"
       socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`);
     }
   });
