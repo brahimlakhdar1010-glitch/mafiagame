@@ -71,7 +71,7 @@ function resolveNight(roomId) {
   if (killedId && killedId !== protectedId) {
     room.players.forEach(p => { if (p.id === killedId) p.dead = true; });
     const victim = room.players.find(p => p.id === killedId);
-    news = `تم اغتيال ${victim.username} في هذه الليلة! ☠`;
+    news = تم اغتيال ${victim.username} في هذه الليلة! ☠;
   } else if (killedId && killedId === protectedId) {
     news = "حاولت المافيا القتل لكن الطبيب أنقذ الضحية! 🎉";
   }
@@ -100,7 +100,7 @@ function resolveDay(roomId) {
   if (eliminated) {
     room.players.forEach(p => { if (p.id === eliminated) p.dead = true; });
     const victim = room.players.find(p => p.id === eliminated);
-    news = `قرر الشعب إقصاء ${victim.username}! 🏛`;
+    news = قرر الشعب إقصاء ${victim.username}! 🏛;
   }
 
   room.phase = "night";
@@ -115,14 +115,12 @@ function resolveDay(roomId) {
 }
 
 io.on("connection", (socket) => {
-
   socket.on("createRoom", ({ username, password }) => {
     const roomId = generateRoomId();
     rooms[roomId] = {
       password, players: [], phase: "lobby", gameStarted: false,
       votes: {}, roles: {}, nightAction: { mafia: null, doctor: null },
-      timeLeft: 0, timerInterval: null,
-      voiceUsers: [] // ✅ إضافة الصوت فقط
+      timeLeft: 0, timerInterval: null
     };
     socket.join(roomId);
     rooms[roomId].players.push({ id: socket.id, username, dead: false });
@@ -149,6 +147,7 @@ io.on("connection", (socket) => {
     startTimer(roomId, 30);
   });
 
+  // إضافة نظام استقبال الرسائل وإعادة توجيهها
   socket.on("chatMessage", ({ roomId, msg }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -165,7 +164,7 @@ io.on("connection", (socket) => {
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
       const targetRole = room.roles[targetId];
-      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`);
+      socket.emit("newsUpdate", نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'});
     }
   });
 
@@ -177,47 +176,11 @@ io.on("connection", (socket) => {
 
   socket.on("endDay", (roomId) => { resolveDay(roomId); });
 
-  /* ================== نظام الصوت ================== */
-
-  socket.on("joinVoice", (roomId) => {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (!room.voiceUsers) room.voiceUsers = [];
-
-    if (!room.voiceUsers.includes(socket.id)) {
-      room.voiceUsers.push(socket.id);
-    }
-
-    io.to(roomId).emit("voiceUsers", room.voiceUsers);
-  });
-
-  socket.on("offer", ({ target, offer }) => {
-    io.to(target).emit("offer", { from: socket.id, offer });
-  });
-
-  socket.on("answer", ({ target, answer }) => {
-    io.to(target).emit("answer", { from: socket.id, answer });
-  });
-
-  socket.on("iceCandidate", ({ target, candidate }) => {
-    io.to(target).emit("iceCandidate", { from: socket.id, candidate });
-  });
-
-  /* ================== نهاية الصوت ================== */
-
   socket.on("disconnect", () => {
     for (let roomId in rooms) {
       if(rooms[roomId]) {
         rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
-
-        // ✅ حذف من الصوت
-        if (rooms[roomId].voiceUsers) {
-          rooms[roomId].voiceUsers = rooms[roomId].voiceUsers.filter(id => id !== socket.id);
-        }
-
         io.to(roomId).emit("updatePlayers", rooms[roomId].players);
-
         if(rooms[roomId].players.length === 0) {
             clearInterval(rooms[roomId].timerInterval);
             delete rooms[roomId];
@@ -225,7 +188,7 @@ io.on("connection", (socket) => {
       }
     }
   });
-
 });
 
 server.listen(process.env.PORT || 3000, () => { console.log("السيرفر يعمل..."); });
+ 
