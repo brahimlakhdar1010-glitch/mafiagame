@@ -51,8 +51,11 @@ function startTimer(roomId, seconds) {
 
     if (room.timeLeft <= 0) {
       clearInterval(room.timerInterval);
-      if (room.phase === "night") resolveNight(roomId);
-      else if (room.phase === "day") resolveDay(roomId);
+      if (room.phase === "night") {
+        resolveNight(roomId);
+      } else if (room.phase === "day") {
+        resolveDay(roomId);
+      }
     }
   }, 1000);
 }
@@ -75,7 +78,6 @@ function resolveNight(roomId) {
 
   room.phase = "day";
   room.nightAction = { mafia: null, doctor: null };
-
   io.to(roomId).emit("newsUpdate", news);
   io.to(roomId).emit("phaseUpdate", room.phase);
   io.to(roomId).emit("updatePlayers", room.players);
@@ -90,9 +92,7 @@ function resolveDay(roomId) {
   if (!room) return;
 
   let tally = {};
-  Object.values(room.votes).forEach(v => {
-    if (v) tally[v] = (tally[v] || 0) + 1;
-  });
+  Object.values(room.votes).forEach(v => { if (v) tally[v] = (tally[v] || 0) + 1; });
 
   let eliminated = Object.keys(tally).sort((a,b) => tally[b] - tally[a])[0];
   let news = "لم يتم إقصاء أحد اليوم.";
@@ -105,7 +105,6 @@ function resolveDay(roomId) {
 
   room.phase = "night";
   room.votes = {};
-
   io.to(roomId).emit("newsUpdate", news);
   io.to(roomId).emit("phaseUpdate", room.phase);
   io.to(roomId).emit("updatePlayers", room.players);
@@ -116,25 +115,6 @@ function resolveDay(roomId) {
 }
 
 io.on("connection", (socket) => {
-
-  // ✅ VOICE FIX
-  socket.on("voice-join", (roomId) => {
-    const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-    socket.emit("voice-users", clients.filter(id => id !== socket.id));
-  });
-
-  socket.on("voice-offer", (data) => {
-    io.to(data.to).emit("voice-offer", { from: socket.id, offer: data.offer });
-  });
-
-  socket.on("voice-answer", (data) => {
-    io.to(data.to).emit("voice-answer", { from: socket.id, answer: data.answer });
-  });
-
-  socket.on("voice-ice", (data) => {
-    io.to(data.to).emit("voice-ice", { from: socket.id, candidate: data.candidate });
-  });
-
   socket.on("createRoom", ({ username, password }) => {
     const roomId = generateRoomId();
     rooms[roomId] = {
@@ -142,10 +122,8 @@ io.on("connection", (socket) => {
       votes: {}, roles: {}, nightAction: { mafia: null, doctor: null },
       timeLeft: 0, timerInterval: null
     };
-
     socket.join(roomId);
     rooms[roomId].players.push({ id: socket.id, username, dead: false });
-
     socket.emit("roomCreated", { roomId });
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
@@ -153,54 +131,40 @@ io.on("connection", (socket) => {
   socket.on("joinRoom", ({ roomId, username, password }) => {
     const room = rooms[roomId];
     if (!room || room.password !== password || room.gameStarted) return;
-
     socket.join(roomId);
     room.players.push({ id: socket.id, username, dead: false });
-
     io.to(roomId).emit("updatePlayers", room.players);
   });
 
   socket.on("startGame", (roomId) => {
     const room = rooms[roomId];
     if (!room || room.gameStarted) return;
-
     room.gameStarted = true;
     room.phase = "night";
     room.roles = assignRoles(room.players);
-
-    room.players.forEach(p => {
-      io.to(p.id).emit("roleAssigned", room.roles[p.id]);
-    });
-
+    room.players.forEach(p => { io.to(p.id).emit("roleAssigned", room.roles[p.id]); });
     io.to(roomId).emit("phaseUpdate", room.phase);
     startTimer(roomId, 30);
   });
 
+  // إضافة نظام استقبال الرسائل وإعادة توجيهها
   socket.on("chatMessage", ({ roomId, msg }) => {
     const room = rooms[roomId];
     if (!room) return;
-
     const player = room.players.find(p => p.id === socket.id);
     if (player && !player.dead) {
-      io.to(roomId).emit("receiveMessage", {
-        user: player.username,
-        msg: msg
-      });
+      io.to(roomId).emit("receiveMessage", { user: player.username, msg: msg });
     }
   });
 
   socket.on("action", ({ roomId, targetId, type }) => {
     const room = rooms[roomId];
     if (!room || room.phase !== "night") return;
-
     if (type === "mafia") room.nightAction.mafia = targetId;
     if (type === "doctor") room.nightAction.doctor = targetId;
-
     if (type === "police") {
       const targetRole = room.roles[targetId];
-      socket.emit("newsUpdate",
-        `نتيجة التحقيق: ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`
-      );
+      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`);
     }
   });
 
@@ -210,25 +174,20 @@ io.on("connection", (socket) => {
     room.votes[socket.id] = targetId;
   });
 
-  socket.on("endDay", (roomId) => resolveDay(roomId));
+  socket.on("endDay", (roomId) => { resolveDay(roomId); });
 
   socket.on("disconnect", () => {
     for (let roomId in rooms) {
-      if (rooms[roomId]) {
-        rooms[roomId].players =
-          rooms[roomId].players.filter(p => p.id !== socket.id);
-
+      if(rooms[roomId]) {
+        rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
         io.to(roomId).emit("updatePlayers", rooms[roomId].players);
-
-        if (rooms[roomId].players.length === 0) {
-          clearInterval(rooms[roomId].timerInterval);
-          delete rooms[roomId];
+        if(rooms[roomId].players.length === 0) {
+            clearInterval(rooms[roomId].timerInterval);
+            delete rooms[roomId];
         }
       }
     }
   });
 });
 
-server.listen(process.env.PORT || 3000, () => {
-  console.log("السيرفر يعمل...");
-});
+server.listen(process.env.PORT || 3000, () => { console.log("السيرفر يعمل..."); });
