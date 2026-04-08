@@ -169,8 +169,107 @@ socket.on("roleAssigned", role => {
     myRole = role;
     document.getElementById("voice-controls").classList.remove("hidden");
 });
+<script>
 
-/* باقي الكود كما هو تماما بدون أي تغيير */
+/* ================== إصلاح الدوال الناقصة ================== */
+
+function createRoom() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    if (!username || !password) {
+        alert("أدخل الاسم وكلمة المرور");
+        return;
+    }
+
+    socket.emit("createRoom", { username, password });
+}
+
+function joinRoom() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    const roomId = document.getElementById("roomId").value;
+
+    if (!username || !password || !roomId) {
+        alert("أدخل جميع المعلومات");
+        return;
+    }
+
+    currentRoom = roomId;
+    socket.emit("joinRoom", { roomId, username, password });
+}
+
+function startGame() {
+    socket.emit("startGame", currentRoom);
+}
+
+function sendMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value;
+
+    if (!msg) return;
+
+    socket.emit("chatMessage", { roomId: currentRoom, msg });
+    input.value = "";
+}
+
+/* ================== استقبال البيانات ================== */
+
+socket.on("roomCreated", ({ roomId }) => {
+    currentRoom = roomId;
+    alert("تم إنشاء الغرفة: " + roomId);
+});
+
+socket.on("updatePlayers", (players) => {
+    const list = document.getElementById("players-list");
+    list.innerHTML = "";
+
+    players.forEach(p => {
+        const li = document.createElement("li");
+        li.textContent = p.username + (p.dead ? " ☠" : "");
+        if (p.dead) li.classList.add("dead");
+        list.appendChild(li);
+    });
+});
+
+socket.on("receiveMessage", ({ user, msg }) => {
+    const box = document.getElementById("chat-box");
+    const div = document.createElement("div");
+    div.textContent = user + ": " + msg;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+});
+
+socket.on("timerUpdate", (time) => {
+    const timer = document.getElementById("timer-display");
+    timer.classList.remove("hidden");
+    timer.textContent = formatTime(time);
+});
+
+socket.on("newsUpdate", (news) => {
+    const bar = document.getElementById("news-bar");
+    bar.classList.remove("hidden");
+    bar.textContent = news;
+});
+
+socket.on("gameOver", (winner) => {
+    alert("انتهت اللعبة! الفائز: " + winner);
+});
+
+/* ================== إظهار الواجهات ================== */
+
+socket.on("phaseUpdate", phase => {
+    currentPhase = phase;
+    document.getElementById("phase-text").textContent = phase;
+
+    if (phase !== "lobby") {
+        document.getElementById("chat-area").classList.remove("hidden");
+        document.getElementById("controls").classList.remove("hidden");
+    }
+});
+
+</script>
+
 </script>
 </body>
 </html>
