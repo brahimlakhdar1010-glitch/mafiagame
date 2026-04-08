@@ -115,12 +115,14 @@ function resolveDay(roomId) {
 }
 
 io.on("connection", (socket) => {
+
   socket.on("createRoom", ({ username, password }) => {
     const roomId = generateRoomId();
     rooms[roomId] = {
       password, players: [], phase: "lobby", gameStarted: false,
       votes: {}, roles: {}, nightAction: { mafia: null, doctor: null },
-      timeLeft: 0, timerInterval: null
+      timeLeft: 0, timerInterval: null,
+      voiceUsers: [] // ✅ إضافة الصوت فقط
     };
     socket.join(roomId);
     rooms[roomId].players.push({ id: socket.id, username, dead: false });
@@ -147,7 +149,6 @@ io.on("connection", (socket) => {
     startTimer(roomId, 30);
   });
 
-  // إضافة نظام استقبال الرسائل وإعادة توجيهها
   socket.on("chatMessage", ({ roomId, msg }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -176,11 +177,47 @@ io.on("connection", (socket) => {
 
   socket.on("endDay", (roomId) => { resolveDay(roomId); });
 
+  /* ================== نظام الصوت ================== */
+
+  socket.on("joinVoice", (roomId) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (!room.voiceUsers) room.voiceUsers = [];
+
+    if (!room.voiceUsers.includes(socket.id)) {
+      room.voiceUsers.push(socket.id);
+    }
+
+    io.to(roomId).emit("voiceUsers", room.voiceUsers);
+  });
+
+  socket.on("offer", ({ target, offer }) => {
+    io.to(target).emit("offer", { from: socket.id, offer });
+  });
+
+  socket.on("answer", ({ target, answer }) => {
+    io.to(target).emit("answer", { from: socket.id, answer });
+  });
+
+  socket.on("iceCandidate", ({ target, candidate }) => {
+    io.to(target).emit("iceCandidate", { from: socket.id, candidate });
+  });
+
+  /* ================== نهاية الصوت ================== */
+
   socket.on("disconnect", () => {
     for (let roomId in rooms) {
       if(rooms[roomId]) {
         rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
+
+        // ✅ حذف من الصوت
+        if (rooms[roomId].voiceUsers) {
+          rooms[roomId].voiceUsers = rooms[roomId].voiceUsers.filter(id => id !== socket.id);
+        }
+
         io.to(roomId).emit("updatePlayers", rooms[roomId].players);
+
         if(rooms[roomId].players.length === 0) {
             clearInterval(rooms[roomId].timerInterval);
             delete rooms[roomId];
@@ -188,6 +225,7 @@ io.on("connection", (socket) => {
       }
     }
   });
+
 });
 
 server.listen(process.env.PORT || 3000, () => { console.log("السيرفر يعمل..."); });
