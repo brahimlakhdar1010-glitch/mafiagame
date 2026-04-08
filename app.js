@@ -118,7 +118,7 @@ function resolveDay(roomId) {
 io.on("connection", (socket) => {
 
   // ✅ VOICE FIX
-  socket.on("voice-join", (roomId) => {
+  socket.join(roomId) => {
     const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
     socket.emit("voice-users", clients.filter(id => id !== socket.id));
   });
