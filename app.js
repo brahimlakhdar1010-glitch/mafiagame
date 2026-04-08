@@ -122,6 +122,31 @@ io.on("connection", (socket) => {
       votes: {}, roles: {}, nightAction: { mafia: null, doctor: null },
       timeLeft: 0, timerInterval: null
     };
+    socket.on("voice-join", (roomId) => {
+  const clients = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+  socket.emit("voice-users", clients.filter(id => id !== socket.id));
+});
+
+socket.on("voice-offer", (data) => {
+  io.to(data.to).emit("voice-offer", {
+    from: socket.id,
+    offer: data.offer
+  });
+});
+
+socket.on("voice-answer", (data) => {
+  io.to(data.to).emit("voice-answer", {
+    from: socket.id,
+    answer: data.answer
+  });
+});
+
+socket.on("voice-ice", (data) => {
+  io.to(data.to).emit("voice-ice", {
+    from: socket.id,
+    candidate: data.candidate
+  });
+});
     socket.join(roomId);
     rooms[roomId].players.push({ id: socket.id, username, dead: false });
     socket.emit("roomCreated", { roomId });
