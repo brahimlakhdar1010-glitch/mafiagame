@@ -2,204 +2,202 @@
 <html dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <script src="https://cdn.tailwindcss.com"></script>
 <title>لعبة مافيا برو</title>
 <style>
-.dead { opacity: 0.5; pointer-events: none; text-decoration: line-through; }
-#chat-box { height: 200px; overflow-y: auto; }
+    .dead { opacity: 0.5; pointer-events: none; text-decoration: line-through; }
+    #chat-box { height: 200px; overflow-y: auto; }
+    /* تحسينات إضافية للهواتف لضمان عدم صغر الخط */
+    body { font-size: 16px; }
+    input, button { font-size: 14px !important; }
 </style>
 </head>
-
-<body class="bg-gray-900 text-white p-4 text-right">
+<body class="bg-gray-900 text-white p-4 md:p-6 text-right">
 <div class="max-w-xl mx-auto text-center">
+    <h1 class="text-2xl md:text-3xl font-bold mb-4">🎭 لعبة مافيا برو</h1>
+    
+    <div id="timer-display" class="hidden text-3xl md:text-4xl font-mono text-red-500 mb-4 bg-black p-2 rounded shadow-lg border-2 border-red-900">00:00</div>
+    <div id="news-bar" class="bg-blue-900 p-2 my-2 rounded hidden italic text-sm md:text-base"></div>
 
-<h1 class="text-2xl font-bold mb-4">🎭 لعبة مافيا برو</h1>
+    <div id="setup-area" class="space-y-2">
+        <input id="username" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="اسم المستخدم" />
+        <input id="password" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="كلمة المرور" />
+        <br>
+        <button onclick="createRoom()" class="bg-blue-500 w-full md:w-auto px-4 py-2 rounded font-bold">إنشاء غرفة</button>
+        <div class="py-2 text-gray-500">أو</div>
+        <input id="roomId" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="رقم الغرفة" />
+        <button onclick="joinRoom()" class="bg-green-500 w-full md:w-auto px-4 py-2 rounded font-bold">انضمام للغرفة</button>
+    </div>
 
-<input id="username" placeholder="اسم المستخدم" class="p-2 text-black">
-<input id="password" placeholder="كلمة المرور" class="p-2 text-black">
+    <hr class="my-4 border-gray-700">
+    <h2 class="text-lg md:text-xl">المرحلة الحالية: <span id="phase-text" class="text-blue-400">الانتظار</span></h2>
+    <div id="my-role" class="text-xl md:text-2xl font-bold text-yellow-400 my-2"></div>
+    
+    <div id="game-board" class="mt-4">
+        <h3 class="font-bold mb-2">قائمة اللاعبين:</h3>
+        <ul id="players-list" class="space-y-2 text-right"></ul>
+    </div>
 
-<br><br>
+    <div id="chat-area" class="mt-6 bg-gray-800 rounded p-4 text-right hidden">
+        <h3 class="font-bold mb-2 border-b border-gray-700 pb-1 text-sm">الدردشة العامة 💬</h3>
+        <div id="chat-box" class="text-sm space-y-1 mb-2 bg-gray-900 p-2 rounded"></div>
+        <div class="flex gap-2">
+            <input id="chat-input" type="text" class="flex-1 p-2 rounded text-black text-sm" placeholder="اكتب..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button onclick="sendMessage()" class="bg-blue-600 px-3 py-1 rounded text-sm">إرسال</button>
+        </div>
+    </div>
 
-<button onclick="createRoom()" class="bg-blue-500 px-4 py-2">إنشاء غرفة</button>
-
-<br><br>
-
-<input id="roomId" placeholder="رقم الغرفة" class="p-2 text-black">
-<button onclick="joinRoom()" class="bg-green-500 px-4 py-2">انضمام</button>
-
-<hr class="my-4">
-
-<h2>المرحلة: <span id="phase-text">الانتظار</span></h2>
-<div id="my-role"></div>
-
-<ul id="players-list"></ul>
-
-<div id="chat-area" class="hidden">
-<div id="chat-box"></div>
-<input id="chat-input">
-<button onclick="sendMessage()">إرسال</button>
-</div>
-
-<br>
-
-<button onclick="startVoice()" class="bg-red-500 px-4 py-2">🎤 تشغيل الصوت</button>
-<button onclick="stopVoice()" class="bg-gray-500 px-4 py-2">إيقاف</button>
-
-<br><br>
-
-<button onclick="startGame()" class="bg-purple-500 px-4 py-2">بدء</button>
-
+    <div id="controls" class="mt-4 flex flex-col gap-2 hidden">
+        <button id="start-btn" onclick="startGame()" class="bg-purple-500 w-full py-2 rounded font-bold">بدء اللعبة</button>
+        <button id="end-day-btn" onclick="endDay()" class="bg-yellow-600 w-full py-2 rounded hidden font-bold">إنهاء التصويت مبكراً</button>
+    </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-
 const socket = io();
-let currentRoom, myId, myRole;
+let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
 
-socket.on("connect", () => myId = socket.id);
-
-function createRoom() {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
-
-    socket.emit("createRoom", { username, password });
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function joinRoom() {
-    currentRoom = document.getElementById("roomId").value;
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
+socket.on("connect", () => { myId = socket.id; });
 
-    socket.emit("joinRoom", { roomId: currentRoom, username, password });
-}
-
-socket.on("roomCreated", (data) => {
-    currentRoom = data.roomId;
-    alert("رقم الغرفة: " + currentRoom);
+socket.on("timerUpdate", (timeLeft) => {
+    const timerDiv = document.getElementById("timer-display");
+    timerDiv.classList.remove("hidden");
+    timerDiv.textContent = formatTime(timeLeft);
 });
 
-socket.on("updatePlayers", (players) => {
+socket.on("newsUpdate", msg => {
+    const bar = document.getElementById("news-bar");
+    bar.classList.remove("hidden");
+    bar.textContent = msg;
+    setTimeout(() => bar.classList.add("hidden"), 10000);
+});
+
+socket.on("phaseUpdate", phase => {
+    currentPhase = phase;
+    const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
+    document.getElementById("phase-text").textContent = pText[phase];
+    
+    const endDayBtn = document.getElementById("end-day-btn");
+    if (phase === "day") endDayBtn.classList.remove("hidden");
+    else endDayBtn.classList.add("hidden");
+
+    refreshUI();
+});
+
+socket.on("updatePlayers", players => {
     const list = document.getElementById("players-list");
     list.innerHTML = "";
+    
+    const me = players.find(p => p.id === myId);
+    if (me && me.dead) {
+        isDead = true;
+        document.getElementById("chat-input").disabled = true;
+        document.getElementById("chat-input").placeholder = "أنت ميت...";
+    }
 
     players.forEach(p => {
         const li = document.createElement("li");
-        li.textContent = p.username;
+        li.className = `flex justify-between items-center p-3 bg-gray-800 border border-gray-700 rounded shadow-sm ${p.dead ? 'dead' : ''}`;
+        li.innerHTML = `<span class="font-medium">${p.username} ${p.dead ? '☠' : ''}</span>`;
+        
+        if (!isDead && !p.dead && currentPhase !== "lobby") {
+            const btn = document.createElement("button");
+            btn.className = "px-3 py-1 rounded text-xs font-bold";
+            
+            if (currentPhase === "night") {
+                if (myRole === "mafia") { btn.textContent = "اغتيال"; btn.className += " bg-red-700"; btn.onclick = () => sendAction(p.id, 'mafia'); }
+                else if (myRole === "doctor") { btn.textContent = "حماية"; btn.className += " bg-green-600"; btn.onclick = () => sendAction(p.id, 'doctor'); }
+                else if (myRole === "police") { btn.textContent = "تحقيق"; btn.className += " bg-blue-600"; btn.onclick = () => sendAction(p.id, 'police'); }
+                else { btn.style.display = "none"; }
+            } else if (currentPhase === "day") {
+                btn.textContent = "تصويت";
+                btn.className += " bg-orange-600";
+                btn.onclick = () => sendVote(p.id);
+            }
+            li.appendChild(btn);
+        }
         list.appendChild(li);
     });
 });
 
-socket.on("roleAssigned", (role) => {
+function sendMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value.trim();
+    if (msg && !isDead && currentRoom) {
+        socket.emit("chatMessage", { roomId: currentRoom, msg: msg });
+        input.value = "";
+    }
+}
+
+socket.on("receiveMessage", data => {
+    const box = document.getElementById("chat-box");
+    const div = document.createElement("div");
+    div.className = "border-b border-gray-800 py-1";
+    div.innerHTML = `<span class="text-yellow-400 font-bold text-xs">${data.user}:</span> <span class="text-gray-200">${data.msg}</span>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+});
+
+function sendAction(targetId, type) {
+    socket.emit("action", { roomId: currentRoom, targetId, type });
+    alert("تم تنفيذ المهمة!");
+}
+
+function sendVote(targetId) {
+    socket.emit("vote", { roomId: currentRoom, targetId });
+    alert("تم التصويت!");
+}
+
+function refreshUI() {
+    if (isDead) {
+        document.getElementById("my-role").innerHTML = `<span class="text-red-500">ميت ☠</span>`;
+        document.getElementById("controls").classList.add("hidden");
+    }
+}
+
+socket.on("roleAssigned", role => {
     myRole = role;
-    document.getElementById("my-role").textContent = role;
+    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
+    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
+    document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("controls").classList.remove("hidden");
+    document.getElementById("start-btn").classList.add("hidden");
     document.getElementById("chat-area").classList.remove("hidden");
 });
 
-function startGame() {
-    socket.emit("startGame", currentRoom);
+function createRoom() {
+    const user = document.getElementById("username").value;
+    if(!user) return alert("ادخل اسمك أولاً");
+    socket.emit("createRoom", { username: user, password: document.getElementById("password").value });
+    document.getElementById("controls").classList.remove("hidden");
 }
 
-function sendMessage() {
-    const msg = document.getElementById("chat-input").value;
-    socket.emit("chatMessage", { roomId: currentRoom, msg });
+function joinRoom() { 
+    currentRoom = document.getElementById("roomId").value; 
+    socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value }); 
+    document.getElementById("chat-area").classList.remove("hidden");
 }
 
-socket.on("receiveMessage", (data) => {
-    const box = document.getElementById("chat-box");
-    box.innerHTML += `<div>${data.user}: ${data.msg}</div>`;
+function startGame() { socket.emit("startGame", currentRoom); }
+function endDay() { socket.emit("endDay", currentRoom); }
+
+socket.on("roomCreated", d => { 
+    currentRoom = d.roomId; 
+    alert("غرفة رقم: " + d.roomId); 
 });
 
-socket.on("phaseUpdate", (phase) => {
-    document.getElementById("phase-text").textContent = phase;
+socket.on("gameOver", winner => { 
+    alert("انتهت اللعبة! الفائز: " + winner); 
+    location.reload(); 
 });
-
-
-// ================= VOICE SYSTEM =================
-let localStream;
-let peers = {};
-
-async function startVoice() {
-
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    socket.emit("voice-join", currentRoom);
-
-    socket.on("voice-users", users => {
-        users.forEach(userId => createPeer(userId, true));
-    });
-
-    socket.on("voice-offer", async (data) => {
-        const peer = createPeer(data.from, false);
-        await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await peer.createAnswer();
-        await peer.setLocalDescription(answer);
-
-        socket.emit("voice-answer", {
-            to: data.from,
-            answer,
-            roomId: currentRoom
-        });
-    });
-
-    socket.on("voice-answer", async (data) => {
-        await peers[data.from].setRemoteDescription(new RTCSessionDescription(data.answer));
-    });
-
-    socket.on("voice-ice", (data) => {
-        peers[data.from].addIceCandidate(new RTCIceCandidate(data.candidate));
-    });
-}
-
-function createPeer(userId, initiator) {
-    const peer = new RTCPeerConnection();
-
-    localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
-
-    peer.ontrack = (e) => {
-        const audio = document.createElement("audio");
-        audio.srcObject = e.streams[0];
-        audio.autoplay = true;
-
-        // ✅ الإصلاح الوحيد
-        document.body.appendChild(audio);
-    };
-
-    peer.onicecandidate = (e) => {
-        if (e.candidate) {
-            socket.emit("voice-ice", {
-                to: userId,
-                candidate: e.candidate,
-                roomId: currentRoom
-            });
-        }
-    };
-
-    if (initiator) {
-        peer.createOffer().then(offer => {
-            peer.setLocalDescription(offer);
-            socket.emit("voice-offer", {
-                to: userId,
-                offer,
-                roomId: currentRoom
-            });
-        });
-    }
-
-    peers[userId] = peer;
-    return peer;
-}
-
-function stopVoice() {
-    Object.values(peers).forEach(p => p.close());
-    peers = {};
-
-    if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
-    }
-}
-
 </script>
 </body>
 </html>
