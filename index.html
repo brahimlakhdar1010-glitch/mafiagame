@@ -10,7 +10,89 @@
     #chat-box { height: 200px; overflow-y: auto; }
     body { font-size: 16px; }
     input, button { font-size: 14px !important; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    /* أنماط الصوت */
+    .voice-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: center;
+        margin: 10px 0;
+        flex-wrap: wrap;
+    }
+    
+    #mic-btn {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: 3px solid #4ade80;
+        background: linear-gradient(135deg, #1e40af, #1e3a8a);
+        color: white;
+        font-size: 28px;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+    }
+    
+    #mic-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 0 15px rgba(74, 222, 128, 0.6);
+    }
+    
+    #mic-btn:active {
+        transform: scale(0.95);
+    }
+    
+    #mic-btn.recording {
+        background: linear-gradient(135deg, #dc2626, #991b1b);
+        border-color: #ef4444;
+        animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+        50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+    }
+    
+    #volume-indicator {
+        width: 120px;
+        height: 10px;
+        background: #374151;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #4b5563;
+    }
+    
+    #volume-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+        width: 0%;
+        transition: width 0.1s;
+    }
+    
+    .voice-status {
+        font-size: 12px;
+        color: #60a5fa;
+        text-align: center;
+        width: 100%;
+    }
+
+    .voice-message {
+        background: #1e293b;
+        padding: 10px;
+        border-radius: 8px;
+        margin: 5px 0;
+        border-right: 3px solid #3b82f6;
+    }
+
+    .voice-message audio {
+        width: 100%;
+        height: 32px;
+        margin-top: 5px;
+    }
 </style>
 </head>
 <body class="bg-gray-900 text-white p-4 md:p-6 text-right">
@@ -39,10 +121,24 @@
         <ul id="players-list" class="space-y-2 text-right"></ul>
     </div>
 
+    <!-- قسم الصوت -->
+    <div id="voice-setup" class="hidden mt-6 bg-gray-800 rounded p-4">
+        <h3 class="font-bold mb-3 border-b border-gray-700 pb-1">🎤 نظام التحدث الصوتي</h3>
+        <div class="voice-container">
+            <button id="mic-btn" title="اضغط وتحدث - Press to Talk">🎤</button>
+            <div id="volume-indicator">
+                <div id="volume-bar"></div>
+            </div>
+        </div>
+        <div class="voice-status">
+            <div id="voice-status-text">✅ جاهز للتحدث</div>
+        </div>
+    </div>
+
     <div id="chat-area" class="mt-6 bg-gray-800 rounded p-4 text-right hidden">
         <h3 class="font-bold mb-2 border-b border-gray-700 pb-1 text-sm">الدردشة العامة 💬</h3>
         <div id="chat-box" class="text-sm space-y-1 mb-2 bg-gray-900 p-2 rounded"></div>
-        <div class="flex flex-row-reverse gap-2">
+        <div class="flex gap-2">
             <input id="chat-input" type="text" class="flex-1 p-2 rounded text-black text-sm" placeholder="اكتب..." onkeypress="if(event.key==='Enter') sendMessage()">
             <button onclick="sendMessage()" class="bg-blue-600 px-3 py-1 rounded text-sm">إرسال</button>
         </div>
@@ -58,8 +154,19 @@
 <script>
 const socket = io();
 let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
-let isCreator = false; // تتبع إذا كان اللاعب منشئ الغرفة
-let actionInProgress = false; // منع تكرار الإجراءات
+
+// ===== متغيرات الصوت =====
+let mediaRecorder;
+let audioContext;
+let analyser;
+let microphone;
+let isRecording = false;
+let recordedChunks = [];
+
+const micBtn = document.getElementById('mic-btn');
+const volumeBar = document.getElementById('volume-bar');
+const voiceStatusText = document.getElementById('voice-status-text');
+const voiceSetup = document.getElementById('voice-setup');
 
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
@@ -99,54 +206,30 @@ socket.on("updatePlayers", players => {
     list.innerHTML = "";
     
     const me = players.find(p => p.id === myId);
-    
-    // تحديث حالة الموت بشكل صحيح
-    const wasAlive = !isDead;
-    isDead = me && me.dead ? true : false;
-    
-    // تحديث حالة حقل الدردشة
-    const chatInput = document.getElementById("chat-input");
-    if (isDead) {
-        chatInput.disabled = true;
-        chatInput.placeholder = "أنت ميت...";
-    } else if (wasAlive !== !isDead) { // إذا عاد إلى الحياة (في حالة إعادة تشغيل)
-        chatInput.disabled = false;
-        chatInput.placeholder = "اكتب...";
+    if (me && me.dead) {
+        isDead = true;
+        document.getElementById("chat-input").disabled = true;
+        document.getElementById("chat-input").placeholder = "أنت ميت...";
     }
 
     players.forEach(p => {
         const li = document.createElement("li");
-        li.className = `flex flex-row-reverse justify-between items-center p-3 bg-gray-800 border border-gray-700 rounded shadow-sm ${p.dead ? 'dead' : ''}`;
+        li.className = `flex justify-between items-center p-3 bg-gray-800 border border-gray-700 rounded shadow-sm ${p.dead ? 'dead' : ''}`;
         li.innerHTML = `<span class="font-medium">${p.username} ${p.dead ? '☠' : ''}</span>`;
         
-        // التحقق من أن اللاعب حي والهدف حي والمرحلة مناسبة
-        if (!isDead && !p.dead && currentPhase !== "lobby" && p.id !== myId) {
+        if (!isDead && !p.dead && currentPhase !== "lobby") {
             const btn = document.createElement("button");
-            btn.className = "px-3 py-1 rounded text-xs font-bold transition";
+            btn.className = "px-3 py-1 rounded text-xs font-bold";
             
             if (currentPhase === "night") {
-                if (myRole === "mafia") { 
-                    btn.textContent = "اغتيال"; 
-                    btn.className += " bg-red-700 hover:bg-red-600"; 
-                    btn.onclick = () => sendAction(p.id, 'mafia', btn); 
-                }
-                else if (myRole === "doctor") { 
-                    btn.textContent = "حماية"; 
-                    btn.className += " bg-green-600 hover:bg-green-500"; 
-                    btn.onclick = () => sendAction(p.id, 'doctor', btn); 
-                }
-                else if (myRole === "police") { 
-                    btn.textContent = "تحقيق"; 
-                    btn.className += " bg-blue-600 hover:bg-blue-500"; 
-                    btn.onclick = () => sendAction(p.id, 'police', btn); 
-                }
-                else { 
-                    btn.style.display = "none"; 
-                }
+                if (myRole === "mafia") { btn.textContent = "اغتيال"; btn.className += " bg-red-700"; btn.onclick = () => sendAction(p.id, 'mafia'); }
+                else if (myRole === "doctor") { btn.textContent = "حماية"; btn.className += " bg-green-600"; btn.onclick = () => sendAction(p.id, 'doctor'); }
+                else if (myRole === "police") { btn.textContent = "تحقيق"; btn.className += " bg-blue-600"; btn.onclick = () => sendAction(p.id, 'police'); }
+                else { btn.style.display = "none"; }
             } else if (currentPhase === "day") {
                 btn.textContent = "تصويت";
-                btn.className += " bg-orange-600 hover:bg-orange-500";
-                btn.onclick = () => sendVote(p.id, btn);
+                btn.className += " bg-orange-600";
+                btn.onclick = () => sendVote(p.id);
             }
             li.appendChild(btn);
         }
@@ -160,8 +243,6 @@ function sendMessage() {
     if (msg && !isDead && currentRoom) {
         socket.emit("chatMessage", { roomId: currentRoom, msg: msg });
         input.value = "";
-    } else if (isDead) {
-        alert("لا يمكنك التحدث وأنت ميت!");
     }
 }
 
@@ -174,40 +255,14 @@ socket.on("receiveMessage", data => {
     box.scrollTop = box.scrollHeight;
 });
 
-function sendAction(targetId, type, btn) {
-    if (actionInProgress) {
-        alert("جاري معالجة الإجراء السابق...");
-        return;
-    }
-    
-    actionInProgress = true;
-    btn.disabled = true;
-    
+function sendAction(targetId, type) {
     socket.emit("action", { roomId: currentRoom, targetId, type });
-    
-    setTimeout(() => {
-        actionInProgress = false;
-        btn.disabled = false;
-        alert("تم تنفيذ المهمة!");
-    }, 500);
+    alert("تم تنفيذ المهمة!");
 }
 
-function sendVote(targetId, btn) {
-    if (actionInProgress) {
-        alert("جاري معالجة التصويت السابق...");
-        return;
-    }
-    
-    actionInProgress = true;
-    btn.disabled = true;
-    
+function sendVote(targetId) {
     socket.emit("vote", { roomId: currentRoom, targetId });
-    
-    setTimeout(() => {
-        actionInProgress = false;
-        btn.disabled = false;
-        alert("تم التصويت!");
-    }, 500);
+    alert("تم التصويت!");
 }
 
 function refreshUI() {
@@ -222,36 +277,22 @@ socket.on("roleAssigned", role => {
     const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
     document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
     document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("controls").classList.remove("hidden");
+    document.getElementById("start-btn").classList.add("hidden");
     document.getElementById("chat-area").classList.remove("hidden");
-    
-    // إظهار زر البدء فقط للمنشئ
-    if (isCreator) {
-        document.getElementById("controls").classList.remove("hidden");
-        document.getElementById("start-btn").classList.remove("hidden");
-    } else {
-        document.getElementById("controls").classList.add("hidden");
-    }
 });
 
 function createRoom() {
     const user = document.getElementById("username").value;
     if(!user) return alert("ادخل اسمك أولاً");
-    
-    isCreator = true; // المستخدم الحالي هو منشئ الغرفة
     socket.emit("createRoom", { username: user, password: document.getElementById("password").value });
     document.getElementById("controls").classList.remove("hidden");
 }
 
 function joinRoom() { 
-    const roomId = document.getElementById("roomId").value;
-    const username = document.getElementById("username").value;
-    
-    if (!roomId) return alert("ادخل رقم الغرفة");
-    if (!username) return alert("ادخل اسمك");
-    
-    currentRoom = roomId;
-    isCreator = false; // ليس منشئ الغرفة
-    socket.emit("joinRoom", { roomId: currentRoom, username: username, password: document.getElementById("password").value }); 
+    currentRoom = document.getElementById("roomId").value; 
+    socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value }); 
+    document.getElementById("chat-area").classList.remove("hidden");
 }
 
 function startGame() { socket.emit("startGame", currentRoom); }
@@ -259,14 +300,117 @@ function endDay() { socket.emit("endDay", currentRoom); }
 
 socket.on("roomCreated", d => { 
     currentRoom = d.roomId; 
-    alert("غرفة رقم: " + d.roomId); 
+    alert("غرفة رقم: " + d.roomId);
+    initializeAudio();
 });
 
 socket.on("gameOver", winner => { 
-    isDead = false; // إعادة تعيين حالة الموت
-    actionInProgress = false;
     alert("انتهت اللعبة! الفائز: " + winner); 
     location.reload(); 
+});
+
+// ===== نظام الصوت الاحترافي =====
+async function initializeAudio() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: { 
+                echoCancellation: true, 
+                noiseSuppression: true,
+                autoGainControl: true 
+            } 
+        });
+        
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        
+        microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+        
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+            recordedChunks = [];
+            
+            if (currentRoom && !isDead) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    socket.emit("voiceMessage", {
+                        roomId: currentRoom,
+                        audioData: reader.result,
+                        sender: document.getElementById("username").value
+                    });
+                };
+                reader.readAsArrayBuffer(audioBlob);
+            }
+        };
+        
+        voiceSetup.classList.remove('hidden');
+        voiceStatusText.textContent = '✅ الميكروفون جاهز';
+        console.log('✅ الصوت جاهز');
+    } catch (err) {
+        console.error('❌ خطأ الميكروفون:', err);
+        voiceStatusText.textContent = '❌ لم يتم تفعيل الميكروفون';
+        alert('يرجى السماح باستخدام الميكروفون');
+    }
+}
+
+// تشغيل الميكروفون عند الضغط
+micBtn.addEventListener('mousedown', () => {
+    if (!isRecording && mediaRecorder && !isDead) {
+        isRecording = true;
+        recordedChunks = [];
+        mediaRecorder.start();
+        micBtn.classList.add('recording');
+        voiceStatusText.textContent = '🔴 جاري التسجيل...';
+        startVolumeMonitor();
+    }
+});
+
+// إيقاف الميكروفون عند ترك الضغط
+document.addEventListener('mouseup', () => {
+    if (isRecording && mediaRecorder) {
+        isRecording = false;
+        mediaRecorder.stop();
+        micBtn.classList.remove('recording');
+        voiceStatusText.textContent = '✅ جاري الإرسال...';
+        setTimeout(() => { voiceStatusText.textContent = '✅ الميكروفون جاهز'; }, 1500);
+    }
+});
+
+// رصد مستوى الصوت
+function startVolumeMonitor() {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    
+    function monitor() {
+        if (!isRecording) return;
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        volumeBar.style.width = (average / 255 * 100) + '%';
+        requestAnimationFrame(monitor);
+    }
+    monitor();
+}
+
+// استقبال الرسائل الصوتية
+socket.on("receiveVoiceMessage", (data) => {
+    const box = document.getElementById("chat-box");
+    const div = document.createElement("div");
+    div.className = "voice-message";
+    
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = URL.createObjectURL(new Blob([data.audioData], { type: 'audio/webm' }));
+    
+    div.innerHTML = `<span class="text-yellow-400 font-bold text-xs">🎤 ${data.sender}</span>`;
+    div.appendChild(audio);
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
 });
 </script>
 </body>
