@@ -22,8 +22,16 @@ function generateRoomId() {
 function assignRoles(players) {
   const roles = ["mafia", "doctor", "police", "citizen"];
   let assigned = {};
+  
+  // مزج الأدوار بطريقة صحيحة عشوائياً
+  let shuffledRoles = [...roles];
+  for (let i = shuffledRoles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledRoles[i], shuffledRoles[j]] = [shuffledRoles[j], shuffledRoles[i]];
+  }
+  
   players.forEach((p, i) => {
-    assigned[p.id] = roles[i % roles.length];
+    assigned[p.id] = shuffledRoles[i % shuffledRoles.length];
   });
   return assigned;
 }
