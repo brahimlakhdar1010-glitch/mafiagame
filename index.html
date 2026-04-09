@@ -152,7 +152,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-const socket = io(window.location.origin);
+const socket = io();
 let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
 
 // ===== متغيرات الصوت =====
