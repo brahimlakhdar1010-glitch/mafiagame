@@ -291,8 +291,9 @@ function createRoom() {
 
 function joinRoom() { 
     currentRoom = document.getElementById("roomId").value; 
-    socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value }); 
+    socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value });
     document.getElementById("chat-area").classList.remove("hidden");
+    initializeAudio();
 }
 
 function startGame() { socket.emit("startGame", currentRoom); }
@@ -361,7 +362,14 @@ async function initializeAudio() {
 }
 
 // تشغيل الميكروفون عند الضغط
-micBtn.addEventListener('mousedown', () => {
+micBtn.addEventListener('mousedown', startRecording);
+document.addEventListener('mouseup', stopRecording);
+
+// دعم الهاتف 📱
+micBtn.addEventListener('touchstart', startRecording);
+document.addEventListener('touchend', stopRecording);
+
+function startRecording() {
     if (!isRecording && mediaRecorder && !isDead) {
         isRecording = true;
         recordedChunks = [];
@@ -370,19 +378,19 @@ micBtn.addEventListener('mousedown', () => {
         voiceStatusText.textContent = '🔴 جاري التسجيل...';
         startVolumeMonitor();
     }
-});
+}
 
-// إيقاف الميكروفون عند ترك الضغط
-document.addEventListener('mouseup', () => {
+function stopRecording() {
     if (isRecording && mediaRecorder) {
         isRecording = false;
         mediaRecorder.stop();
         micBtn.classList.remove('recording');
         voiceStatusText.textContent = '✅ جاري الإرسال...';
-        setTimeout(() => { voiceStatusText.textContent = '✅ الميكروفون جاهز'; }, 1500);
+        setTimeout(() => { 
+            voiceStatusText.textContent = '✅ الميكروفون جاهز'; 
+        }, 1500);
     }
-});
-
+}
 // رصد مستوى الصوت
 function startVolumeMonitor() {
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
