@@ -292,16 +292,39 @@ function createRoom() {
 }
 // ✅ إصلاح استدعاء الدالة الصحيح
 function joinRoom() { 
-    const roomId = document.getElementById("roomId").value;
-    if(!roomId) return alert("ادخل رقم الغرفة أولاً");
+    const roomId = document.getElementById("roomId").value.trim(); // ✅ إزالة المسافات
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value;
+    
+    if(!roomId) return alert("ادخل رقم الغرفة أولاً ❌");
+    if(!username) return alert("ادخل اسمك أولاً ❌");
+    
+    console.log(`🔍 محاولة الدخول للغرفة: ${roomId}`);
     
     currentRoom = roomId; 
     socket.emit("joinRoom", { 
-        roomId: currentRoom, 
-        username: document.getElementById("username").value, 
-        password: document.getElementById("password").value 
+        roomId: roomId, 
+        username: username, 
+        password: password 
     });
 }
+
+// ✅ استقبال النجاح
+socket.on("joinedRoomSuccess", (data) => {
+    console.log("✅ تم الانضمام بنجاح:", data);
+    alert("✅ تم الانضمام للغرفة: " + data.roomId);
+    document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("chat-area").classList.remove("hidden");
+    document.getElementById("voice-setup").classList.remove("hidden");
+    initializeAudio();
+    startLiveVoice();
+});
+
+// ✅ استقبال الخطأ مع تفاصيل
+socket.on("joinError", (msg) => { 
+    console.error("❌ خطأ:", msg);
+    alert("❌ فشل الدخول:\n" + msg); 
+});
 
 // ✅ تأكيد نجاح الانضمام قبل تشغيل الصوت
 socket.on("joinedRoomSuccess", (data) => {
