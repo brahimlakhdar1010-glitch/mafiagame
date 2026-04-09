@@ -189,7 +189,18 @@ io.on("connection", (socket) => {
   });
 
   socket.on("endDay", (roomId) => { resolveDay(roomId); });
+// ===== WebRTC Signaling =====
+socket.on("webrtc-offer", ({ roomId, offer }) => {
+  socket.to(roomId).emit("webrtc-offer", { offer, from: socket.id });
+});
 
+socket.on("webrtc-answer", ({ roomId, answer }) => {
+  socket.to(roomId).emit("webrtc-answer", { answer, from: socket.id });
+});
+
+socket.on("webrtc-ice-candidate", ({ roomId, candidate }) => {
+  socket.to(roomId).emit("webrtc-ice-candidate", { candidate, from: socket.id });
+});
   socket.on("disconnect", () => {
     for (let roomId in rooms) {
       if(rooms[roomId]) {
