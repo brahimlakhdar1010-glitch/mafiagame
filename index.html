@@ -290,14 +290,40 @@ function createRoom() {
     socket.emit("createRoom", { username: user, password: document.getElementById("password").value });
     document.getElementById("controls").classList.remove("hidden");
 }
-
+// ✅ إصلاح استدعاء الدالة الصحيح
 function joinRoom() { 
-    currentRoom = document.getElementById("roomId").value; 
-    socket.emit("joinRoom", { roomId: currentRoom, username: document.getElementById("username").value, password: document.getElementById("password").value });
-    document.getElementById("chat-area").classList.remove("hidden");
-    initializeAudio();
-    startliveVoice();
+    const roomId = document.getElementById("roomId").value;
+    if(!roomId) return alert("ادخل رقم الغرفة أولاً");
+    
+    currentRoom = roomId; 
+    socket.emit("joinRoom", { 
+        roomId: currentRoom, 
+        username: document.getElementById("username").value, 
+        password: document.getElementById("password").value 
+    });
 }
+
+// ✅ تأكيد نجاح الانضمام قبل تشغيل الصوت
+socket.on("joinedRoomSuccess", (data) => {
+    console.log("✅ تم الانضمام بنجاح:", data);
+    document.getElementById("chat-area").classList.remove("hidden");
+    document.getElementById("setup-area").classList.add("hidden");
+    initializeAudio();
+    startLiveVoice();  // ✅ اسم صحيح
+});
+
+// ✅ إصلاح عند تلقي أدوار اللعب
+socket.on("roleAssigned", role => {
+    myRole = role;
+    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
+    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
+    document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("controls").classList.remove("hidden");
+    document.getElementById("start-btn").classList.add("hidden");
+    document.getElementById("chat-area").classList.remove("hidden");
+    document.getElementById("voice-setup").classList.remove("hidden");
+});
+
 
 function startGame() { socket.emit("startGame", currentRoom); }
 function endDay() { socket.emit("endDay", currentRoom); }
