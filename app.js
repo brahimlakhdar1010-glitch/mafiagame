@@ -138,13 +138,35 @@ io.on("connection", (socket) => {
 
   socket.on("joinRoom", ({ roomId, username, password }) => {
     const room = rooms[roomId];
-    if (!room) { socket.emit("joinError", "الغرفة غير موجودة"); return; }
-    if (room.password && room.password !== password) { socket.emit("joinError", "كلمة المرور خاطئة"); return; }
-    if (room.gameStarted) { socket.emit("joinError", "اللعبة بدأت بالفعل"); return; }
+    
+    // ✅ تحقق من وجود الغرفة أولاً
+    if (!room) { 
+        socket.emit("joinError", "الغرفة غير موجودة"); 
+        return; 
+    }
+    
+    // ✅ تحقق من كلمة المرور
+    if (room.password && room.password !== password) { 
+        socket.emit("joinError", "كلمة المرور خاطئة"); 
+        return; 
+    }
+    
+    // ✅ تحقق من بدء اللعبة
+    if (room.gameStarted) { 
+        socket.emit("joinError", "اللعبة بدأت بالفعل"); 
+        return; 
+    }
+    
+    // ✅ أضف اللاعب للغرفة
     socket.join(roomId);
     room.players.push({ id: socket.id, username, dead: false });
+    
+    // ✅ أرسل تأكيد للعميل
+    socket.emit("joinedRoomSuccess", { roomId, players: room.players });
+    
+    // ✅ أرسل قائمة اللاعبين للجميع
     io.to(roomId).emit("updatePlayers", room.players);
-  });
+});
 
   socket.on("startGame", (roomId) => {
     const room = rooms[roomId];
