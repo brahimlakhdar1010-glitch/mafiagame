@@ -5,7 +5,12 @@ const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 app.use(express.static("public"));
 
@@ -23,7 +28,6 @@ function assignRoles(players) {
   const roles = ["mafia", "doctor", "police", "citizen"];
   let assigned = {};
   
-  // مزج الأدوار بطريقة صحيحة عشوائياً
   let shuffledRoles = [...roles];
   for (let i = shuffledRoles.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -123,50 +127,83 @@ function resolveDay(roomId) {
 }
 
 io.on("connection", (socket) => {
+  console.log(`🔗 [${socket.id}] اتصل جديد`);
+  console.log(`📊 الغرف الموجودة حالياً:`, Object.keys(rooms));
+
+  // ✅ إضافة قائمة الغرف النشطة
+  socket.on("getRooms", () => {
+    socket.emit("roomsList", Object.keys(rooms));
+  });
+
   socket.on("createRoom", ({ username, password }) => {
     const roomId = generateRoomId();
     rooms[roomId] = {
-      password, players: [], phase: "lobby", gameStarted: false,
-      votes: {}, roles: {}, nightAction: { mafia: null, doctor: null },
-      timeLeft: 0, timerInterval: null
+      password, 
+      players: [], 
+      phase: "lobby", 
+      gameStarted: false,
+      votes: {}, 
+      roles: {}, 
+      nightAction: { mafia: null, doctor: null },
+      timeLeft: 0, 
+      timerInterval: null
     };
     socket.join(roomId);
     rooms[roomId].players.push({ id: socket.id, username, dead: false });
+    
+    console.log(`✅ [${socket.id}] أنشأ غرفة: ${roomId}`);
+    console.log(`📊 الغرف الموجودة الآن:`, Object.keys(rooms));
+    
     socket.emit("roomCreated", { roomId });
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
 
   socket.on("joinRoom", ({ roomId, username, password }) => {
+    console.log(`🔍 [${socket.id}] يحاول الدخول للغرفة: ${roomId}`);
+    console.log(`📊 الغرف المتاحة:`, Object.keys(rooms));
+    
+    // ✅ التحقق من وجود الغرفة
     const room = rooms[roomId];
     
-    // ✅ تحقق من وجود الغرفة أولاً
-    if (!room) { 
-        socket.emit("joinError", "الغرفة غير موجودة"); 
-        return; 
+    if (!room) {
+      console.log(`❌ [${socket.id}] الغرفة ${roomId} غير موجودة!`);
+      console.log(`🔍 البحث في جميع المفاتيح:`, Object.keys(rooms));
+      socket.emit("joinError", "الغرفة غير موجودة ❌ | الرقم الذي أدخلته: " + roomId);
+      return;
     }
     
-    // ✅ تحقق من كلمة المرور
-    if (room.password && room.password !== password) { 
-        socket.emit("joinError", "كلمة المرور خاطئة"); 
-        return; 
+    // ✅ التحقق من كلمة المرور
+    if (room.password !== "" && room.password && room.password !== password) {
+      console.log(`❌ [${socket.id}] كلمة مرور خاطئة للغرفة ${roomId}`);
+      socket.emit("joinError", "كلمة المرور خاطئة ❌");
+      return;
     }
     
-    // ✅ تحقق من بدء اللعبة
-    if (room.gameStarted) { 
-        socket.emit("joinError", "اللعبة بدأت بالفعل"); 
-        return; 
+    // ✅ التحقق من بدء اللعبة
+    if (room.gameStarted) {
+      console.log(`❌ [${socket.id}] اللعبة بدأت بالفعل في الغرفة ${roomId}`);
+      socket.emit("joinError", "اللعبة بدأت بالفعل ❌");
+      return;
     }
     
-    // ✅ أضف اللاعب للغرفة
+    // ✅ إضافة اللاعب
     socket.join(roomId);
     room.players.push({ id: socket.id, username, dead: false });
     
-    // ✅ أرسل تأكيد للعميل
-    socket.emit("joinedRoomSuccess", { roomId, players: room.players });
+    console.log(`✅ [${socket.id}] انضم بنجاح للغرفة ${roomId}`);
+    console.log(`👥 عدد اللاعبين الآن:`, room.players.length);
     
-    // ✅ أرسل قائمة اللاعبين للجميع
+    // ✅ إرسال تأكيد للعميل
+    socket.emit("joinedRoomSuccess", { 
+      roomId, 
+      players: room.players,
+      message: "تم الانضمام بنجاح! ✅"
+    });
+    
+    // ✅ تحديث الجميع
     io.to(roomId).emit("updatePlayers", room.players);
-});
+    io.to(roomId).emit("newsUpdate", `${username} انضم للغرفة! 👋`);
+  });
 
   socket.on("startGame", (roomId) => {
     const room = rooms[roomId];
@@ -174,12 +211,13 @@ io.on("connection", (socket) => {
     room.gameStarted = true;
     room.phase = "night";
     room.roles = assignRoles(room.players);
-    room.players.forEach(p => { io.to(p.id).emit("roleAssigned", room.roles[p.id]); });
+    room.players.forEach(p => { 
+      io.to(p.id).emit("roleAssigned", room.roles[p.id]); 
+    });
     io.to(roomId).emit("phaseUpdate", room.phase);
     startTimer(roomId, 30);
   });
 
-  // نظام الرسائل النصية
   socket.on("chatMessage", ({ roomId, msg }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -189,7 +227,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // نظام الرسائل الصوتية ✅ جديد
   socket.on("voiceMessage", ({ roomId, audioData, sender }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -220,20 +257,29 @@ io.on("connection", (socket) => {
     room.votes[socket.id] = targetId;
   });
 
-  socket.on("endDay", (roomId) => { resolveDay(roomId); });
-// ===== WebRTC Signaling =====
-socket.on("webrtc-offer", ({ roomId, offer }) => {
-  socket.to(roomId).emit("webrtc-offer", { offer, from: socket.id });
-});
+  socket.on("endDay", (roomId) => { 
+    resolveDay(roomId); 
+  });
 
-socket.on("webrtc-answer", ({ roomId, answer }) => {
-  socket.to(roomId).emit("webrtc-answer", { answer, from: socket.id });
-});
+  // WebRTC Signaling
+  socket.on("webrtc-offer", ({ roomId, offer }) => {
+    socket.to(roomId).emit("webrtc-offer", { offer, from: socket.id });
+  });
 
-socket.on("webrtc-ice-candidate", ({ roomId, candidate }) => {
-  socket.to(roomId).emit("webrtc-ice-candidate", { candidate, from: socket.id });
-});
+  socket.on("webrtc-answer", ({ roomId, answer }) => {
+    socket.to(roomId).emit("webrtc-answer", { answer, from: socket.id });
+  });
+
+  socket.on("webrtc-ice-candidate", ({ roomId, candidate }) => {
+    socket.to(roomId).emit("webrtc-ice-candidate", { candidate, from: socket.id });
+  });
+
+  socket.on("joinVoice", ({ roomId }) => {
+    socket.to(roomId).emit("newVoiceUser", { userId: socket.id });
+  });
+
   socket.on("disconnect", () => {
+    console.log(`❌ [${socket.id}] قطع الاتصال`);
     for (let roomId in rooms) {
       if(rooms[roomId]) {
         rooms[roomId].players = rooms[roomId].players.filter(p => p.id !== socket.id);
@@ -241,10 +287,13 @@ socket.on("webrtc-ice-candidate", ({ roomId, candidate }) => {
         if(rooms[roomId].players.length === 0) {
             clearInterval(rooms[roomId].timerInterval);
             delete rooms[roomId];
+            console.log(`🗑️ حذفت الغرفة الفارغة: ${roomId}`);
         }
       }
     }
   });
 });
 
-server.listen(process.env.PORT || 3000, () => { console.log("السيرفر يعمل..."); });
+server.listen(process.env.PORT || 3000, () => { 
+  console.log("🚀 السيرفر يعمل على المنفذ 3000..."); 
+});
