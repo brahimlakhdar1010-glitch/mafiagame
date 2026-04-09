@@ -130,7 +130,9 @@ io.on("connection", (socket) => {
 
   socket.on("joinRoom", ({ roomId, username, password }) => {
     const room = rooms[roomId];
-    if (!room || room.password !== password || room.gameStarted) return;
+    if (!room) { socket.emit("joinError", "الغرفة غير موجودة"); return; }
+    if (room.password && room.password !== password) { socket.emit("joinError", "كلمة المرور خاطئة"); return; }
+    if (room.gameStarted) { socket.emit("joinError", "اللعبة بدأت بالفعل"); return; }
     socket.join(roomId);
     room.players.push({ id: socket.id, username, dead: false });
     io.to(roomId).emit("updatePlayers", room.players);
