@@ -6,51 +6,138 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <title>لعبة مافيا برو</title>
 <style>
-    .dead { opacity: 0.5; pointer-events: none; text-decoration: line-through; }
-    #chat-box { height: 200px; overflow-y: auto; }
-    body { font-size: 16px; }
-    input, button { font-size: 14px !important; }
-    
-    /* أنماط الصوت */
-    .voice-container {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        justify-content: center;
-        margin: 10px 0;
-        flex-wrap: wrap;
-    }
-    
-    #mic-btn {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        border: 3px solid #4ade80;
-        background: linear-gradient(135deg, #1e40af, #1e3a8a);
-        color: white;
-        font-size: 28px;
-        cursor: pointer;
-        transition: all 0.3s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-    }
-    
-    #mic-btn:hover {
-        transform: scale(1.1);
-        box-shadow: 0 0 15px rgba(74, 222, 128, 0.6);
-    }
-    
-    #mic-btn:active {
-        transform: scale(0.95);
-    }
-    
-    #mic-btn.recording {
-        background: linear-gradient(135deg, #dc2626, #991b1b);
-        border-color: #ef4444;
-        animation: pulse 1s infinite;
-    }
+/* ===== تحسين عام ===== */
+body {
+    font-size: 16px;
+    background: radial-gradient(circle at top, #0f172a, #020617);
+    font-family: 'Tajawal', sans-serif;
+}
+
+/* ===== بطاقات ===== */
+.card {
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+}
+
+/* ===== اللاعبين ===== */
+#players-list li {
+    transition: all 0.3s ease;
+    border-radius: 12px;
+}
+
+#players-list li:hover {
+    transform: scale(1.02);
+    background: rgba(59,130,246,0.2);
+}
+
+/* ===== أزرار ===== */
+button {
+    transition: all 0.2s ease;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+/* ===== المؤقت ===== */
+#timer-display {
+    background: linear-gradient(145deg, #000, #111);
+    border-radius: 20px;
+    border: 2px solid #ef4444;
+    box-shadow: inset 0 0 20px rgba(255,0,0,0.3);
+    letter-spacing: 3px;
+}
+
+/* ===== شريط الأخبار ===== */
+#news-bar {
+    animation: fadeIn 0.5s ease;
+    background: linear-gradient(90deg, #1e3a8a, #1d4ed8);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px);}
+    to { opacity: 1; transform: translateY(0);}
+}
+
+/* ===== الدردشة ===== */
+#chat-box {
+    height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+#chat-box::-webkit-scrollbar {
+    width: 5px;
+}
+
+#chat-box::-webkit-scrollbar-thumb {
+    background: #3b82f6;
+    border-radius: 10px;
+}
+
+/* ===== رسائل صوت ===== */
+.voice-message {
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    border: 1px solid rgba(59,130,246,0.3);
+    padding: 10px;
+    border-radius: 10px;
+}
+
+/* ===== المايك ===== */
+#mic-btn {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    border: 3px solid #4ade80;
+    background: radial-gradient(circle, #2563eb, #1e3a8a);
+    font-size: 30px;
+}
+
+#mic-btn.recording {
+    background: radial-gradient(circle, #dc2626, #7f1d1d);
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.7);}
+    70% { box-shadow: 0 0 0 20px rgba(239,68,68,0);}
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0);}
+}
+
+/* ===== الصوت ===== */
+#volume-indicator {
+    width: 150px;
+    height: 12px;
+    background: #111827;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+#volume-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+}
+
+/* ===== اللاعب الميت ===== */
+.dead {
+    opacity: 0.4;
+    filter: grayscale(100%);
+    text-decoration: line-through;
+}
+
+/* ===== عنوان ===== */
+h1 {
+    text-shadow: 0 0 15px rgba(59,130,246,0.6);
+}
+
     
     @keyframes pulse {
         0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
