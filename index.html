@@ -233,7 +233,14 @@ h1 {
         <div class="flex gap-2">
             <input id="chat-input" type="text" class="flex-1 p-2 rounded text-black text-sm" placeholder="اكتب..." onkeypress="if(event.key==='Enter') sendMessage()">
             <button onclick="sendMessage()" class="bg-blue-600 px-3 py-1 rounded text-sm">إرسال</button>
-        </div>
+               </div>
+        <div id="mafia-chat" class="mt-4 bg-red-900 p-3 rounded hidden">
+    <h3 class="font-bold text-sm mb-2">💀 دردشة المافيا</h3>
+    <div id="mafia-box" class="text-xs h-24 overflow-y-auto mb-2"></div>
+    <input id="mafia-input" type="text" class="w-full p-1 text-black text-xs"
+        placeholder="رسالة للمافيا..."
+        onkeypress="if(event.key==='Enter') sendMafiaMessage()">
+</div>
     </div>
 
     <div id="controls" class="mt-4 flex flex-col gap-2 hidden">
@@ -339,7 +346,14 @@ function sendMessage() {
         input.value = "";
     }
 }
-
+function sendMafiaMessage() {
+    const input = document.getElementById("mafia-input");
+    const msg = input.value.trim();
+    if (msg && myRole === "mafia" && currentPhase === "night") {
+        socket.emit("mafiaMessage", { roomId: currentRoom, msg });
+        input.value = "";
+    }
+}
 socket.on("receiveMessage", data => {
     const box = document.getElementById("chat-box");
     const div = document.createElement("div");
@@ -348,7 +362,12 @@ socket.on("receiveMessage", data => {
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 });
-
+socket.on("receiveMafiaMessage", data => {
+    const box = document.getElementById("mafia-box");
+    const div = document.createElement("div");
+    div.innerHTML = `<b>${data.user}:</b> ${data.msg}`;
+    box.appendChild(div);
+});
 function sendAction(targetId, type) {
     socket.emit("action", { roomId: currentRoom, targetId, type });
     alert("تم تنفيذ المهمة!");
@@ -358,11 +377,18 @@ function sendVote(targetId) {
     socket.emit("vote", { roomId: currentRoom, targetId });
     alert("تم التصويت!");
 }
-
 function refreshUI() {
     if (isDead) {
         document.getElementById("my-role").innerHTML = `<span class="text-red-500">ميت ☠</span>`;
         document.getElementById("controls").classList.add("hidden");
+    }
+
+    // دردشة المافيا
+    const mafiaChat = document.getElementById("mafia-chat");
+    if (myRole === "mafia" && currentPhase === "night" && !isDead) {
+        mafiaChat.classList.remove("hidden");
+    } else {
+        mafiaChat.classList.add("hidden");
     }
 }
 
