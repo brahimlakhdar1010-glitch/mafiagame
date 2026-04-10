@@ -329,20 +329,21 @@ socket.on("vote", ({ roomId, targetId }) => {
   const room = rooms[roomId];
   if (!room || room.phase !== "day") return;
 
+  // حفظ التصويت
   room.votes[socket.id] = targetId;
 
-  // ✅ حساب الأصوات
+  // حساب عدد الأصوات
   let tally = {};
   Object.values(room.votes).forEach(v => {
     tally[v] = (tally[v] || 0) + 1;
   });
 
-  // ✅ إرسال الأصوات للجميع
-  io.to(roomId).emit("voteUpdate", tally);
-});
-  socket.on("endDay", (roomId) => { 
-    resolveDay(roomId); 
+  // إرسال النتائج بشكل صحيح
+  io.to(roomId).emit("voteUpdate", {
+    tally: tally,
+    detailedVotes: room.votes
   });
+});
 
   // WebRTC Signaling
   socket.on("webrtc-offer", ({ roomId, offer }) => {
