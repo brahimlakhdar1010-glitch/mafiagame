@@ -610,13 +610,27 @@ socket.on("updatePlayers", players => {
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         pc.ontrack = (event) => {
-            const audio = document.createElement("audio");
-            audio.srcObject = event.streams[0];
-            audio.volume = 1.0;
-audio.muted = false;
-            audio.autoplay = true;
-            document.body.appendChild(audio);
-        };
+    const audio = document.createElement("audio");
+    audio.srcObject = event.streams[0];
+    audio.autoplay = true;
+
+    // 🟢 مؤشر المتكلم
+    const indicator = document.createElement("div");
+    indicator.textContent = "🎤 يتكلم الآن";
+    indicator.style.position = "fixed";
+    indicator.style.bottom = "20px";
+    indicator.style.left = "20px";
+    indicator.style.background = "#22c55e";
+    indicator.style.padding = "5px 10px";
+    indicator.style.borderRadius = "10px";
+    indicator.style.fontSize = "12px";
+
+    document.body.appendChild(indicator);
+    document.body.appendChild(audio);
+
+    // إزالة المؤشر بعد وقت
+    setTimeout(() => indicator.remove(), 2000);
+};
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
