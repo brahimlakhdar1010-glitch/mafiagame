@@ -666,11 +666,13 @@ socket.on("mafiaCount", (count) => {
     div.textContent = "عدد المافيا: " + count;
     div.classList.remove("hidden");
 });
-    let voteCounts = {};
-
-socket.on("voteUpdate", (tally) => {
-    voteCounts = tally;
+  let voteCounts = {};
+let voteDetails = {};  
+socket.on("voteUpdate", (data) => {
+    voteCounts = data.tally;
+    voteDetails = data.detailedVotes;
 });
+
     socket.emit("webrtc-answer", {
         roomId: currentRoom,
         answer: answer
