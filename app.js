@@ -161,7 +161,10 @@ if (sorted.length > 0) {
 
   room.phase = "night";
   room.votes = {};
-  io.to(roomId).emit("voteUpdate", {});
+  io.to(roomId).emit("voteUpdate", {
+  tally: {},
+  detailedVotes: {}
+});
   io.to(roomId).emit("newsUpdate", news);
   io.to(roomId).emit("phaseUpdate", room.phase);
   io.to(roomId).emit("updatePlayers", room.players);
