@@ -256,6 +256,13 @@ placeholder="عدد المافيا">
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
+    let voteCounts = {};
+let voteDetails = {};
+    socket.on("mafiaCount", (count) => {
+    const div = document.getElementById("mafia-count-display");
+    div.textContent = "عدد المافيا: " + count;
+    div.classList.remove("hidden");
+});
 let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
 
 // ===== متغيرات الصوت =====
@@ -293,7 +300,11 @@ socket.on("newsUpdate", msg => {
     bar.textContent = msg;
     setTimeout(() => bar.classList.add("hidden"), 10000);
 });
-
+    
+socket.on("voteUpdate", (data) => {
+    voteCounts = data.tally || {};
+    voteDetails = data.detailedVotes || {};
+});
 socket.on("phaseUpdate", phase => {
     currentPhase = phase;
     const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
@@ -670,13 +681,7 @@ socket.on("webrtc-offer", async ({ offer, from }) => {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-socket.on("mafiaCount", (count) => {
-    const div = document.getElementById("mafia-count-display");
-    div.textContent = "عدد المافيا: " + count;
-    div.classList.remove("hidden");
-});
-  let voteCounts = {};
-let voteDetails = {};  
+ 
 socket.on("voteUpdate", (data) => {
     voteCounts = data.tally;
     voteDetails = data.detailedVotes;
