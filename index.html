@@ -289,6 +289,20 @@ socket.on("phaseUpdate", phase => {
     else endDayBtn.classList.add("hidden");
 
     refreshUI();
+    // 🔇 كتم الصوت في الليل لغير المافيا
+if (phase === "night" && myRole !== "mafia") {
+    Object.values(peerConnections).forEach(pc => {
+        pc.getReceivers().forEach(r => {
+            if (r.track) r.track.enabled = false;
+        });
+    });
+} else {
+    Object.values(peerConnections).forEach(pc => {
+        pc.getReceivers().forEach(r => {
+            if (r.track) r.track.enabled = true;
+        });
+    });
+}
 });
 
 socket.on("updatePlayers", players => {
