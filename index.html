@@ -320,7 +320,8 @@ socket.on("updatePlayers", players => {
     players.forEach(p => {
         const li = document.createElement("li");
         li.className = `flex justify-between items-center p-3 bg-gray-800 border border-gray-700 rounded shadow-sm ${p.dead ? 'dead' : ''}`;
-        li.innerHTML = `<span class="font-medium">${p.username} ${p.dead ? '☠' : ''}</span>`;
+       const votes = voteCounts[p.id] ? ` (${voteCounts[p.id]} 🗳)` : "";
+li.innerHTML = `<span class="font-medium">${p.username}${votes} ${p.dead ? '☠' : ''}</span>`;
         
         if (!isDead && !p.dead && currentPhase !== "lobby") {
             const btn = document.createElement("button");
@@ -664,6 +665,11 @@ socket.on("mafiaCount", (count) => {
     const div = document.getElementById("mafia-count-display");
     div.textContent = "عدد المافيا: " + count;
     div.classList.remove("hidden");
+});
+    let voteCounts = {};
+
+socket.on("voteUpdate", (tally) => {
+    voteCounts = tally;
 });
     socket.emit("webrtc-answer", {
         roomId: currentRoom,
