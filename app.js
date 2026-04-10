@@ -321,12 +321,21 @@ socket.on("mafiaMessage", ({ roomId, msg }) => {
     }
   });
 
-  socket.on("vote", ({ roomId, targetId }) => {
-    const room = rooms[roomId];
-    if (!room || room.phase !== "day") return;
-    room.votes[socket.id] = targetId;
+socket.on("vote", ({ roomId, targetId }) => {
+  const room = rooms[roomId];
+  if (!room || room.phase !== "day") return;
+
+  room.votes[socket.id] = targetId;
+
+  // ✅ حساب الأصوات
+  let tally = {};
+  Object.values(room.votes).forEach(v => {
+    tally[v] = (tally[v] || 0) + 1;
   });
 
+  // ✅ إرسال الأصوات للجميع
+  io.to(roomId).emit("voteUpdate", tally);
+});
   socket.on("endDay", (roomId) => { 
     resolveDay(roomId); 
   });
