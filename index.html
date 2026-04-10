@@ -573,11 +573,27 @@ async function startLiveVoice() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+        // 🎧 فلتر تحسين الصوت (ضعه هنا بالضبط)
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(localStream);
+
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 1.2; // رفع الصوت قليلاً
+
+        source.connect(gainNode);
+
+        const destination = audioCtx.createMediaStreamDestination();
+        gainNode.connect(destination);
+
+        // 🔥 استبدال الصوت بالصوت المحسن
+        localStream = destination.stream;
+
         socket.emit("joinVoice", { roomId: currentRoom });
 
     } catch (e) {
         console.error("خطأ الصوت المباشر", e);
     }
+}
 }
 
 // إنشاء اتصال مع كل لاعب
