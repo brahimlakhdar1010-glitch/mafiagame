@@ -596,6 +596,8 @@ socket.on("updatePlayers", players => {
         pc.ontrack = (event) => {
             const audio = document.createElement("audio");
             audio.srcObject = event.streams[0];
+            audio.volume = 1.0;
+audio.muted = false;
             audio.autoplay = true;
             document.body.appendChild(audio);
         };
