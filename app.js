@@ -24,19 +24,34 @@ function generateRoomId() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-function assignRoles(players) {
-  const roles = ["mafia", "doctor", "police", "citizen"];
+function assignRoles(players, mafiaCount = 1) {
   let assigned = {};
-  
-  let shuffledRoles = [...roles];
-  for (let i = shuffledRoles.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffledRoles[i], shuffledRoles[j]] = [shuffledRoles[j], shuffledRoles[i]];
+  let rolesList = [];
+
+  // ✅ إضافة المافيا حسب العدد
+  for (let i = 0; i < mafiaCount; i++) {
+    rolesList.push("mafia");
   }
-  
+
+  // باقي الأدوار
+  rolesList.push("doctor");
+  rolesList.push("police");
+
+  // الباقي مواطنين
+  while (rolesList.length < players.length) {
+    rolesList.push("citizen");
+  }
+
+  // خلط الأدوار
+  for (let i = rolesList.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rolesList[i], rolesList[j]] = [rolesList[j], rolesList[i]];
+  }
+
   players.forEach((p, i) => {
-    assigned[p.id] = shuffledRoles[i % shuffledRoles.length];
+    assigned[p.id] = rolesList[i];
   });
+
   return assigned;
 }
 
