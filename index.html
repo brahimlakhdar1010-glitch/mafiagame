@@ -660,7 +660,11 @@ socket.on("webrtc-offer", async ({ offer, from }) => {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-
+socket.on("mafiaCount", (count) => {
+    const div = document.getElementById("mafia-count-display");
+    div.textContent = "عدد المافيا: " + count;
+    div.classList.remove("hidden");
+});
     socket.emit("webrtc-answer", {
         roomId: currentRoom,
         answer: answer
