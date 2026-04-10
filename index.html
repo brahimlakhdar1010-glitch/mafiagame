@@ -213,7 +213,7 @@ h1 {
         <h3 class="font-bold mb-2">قائمة اللاعبين:</h3>
         <ul id="players-list" class="space-y-2 text-right"></ul>
     </div>
-
+<div id="votes-log" class="text-xs mt-2 bg-gray-900 p-2 rounded"></div>
     <!-- قسم الصوت -->
     <div id="voice-setup" class="hidden mt-6 bg-gray-800 rounded p-4">
         <h3 class="font-bold mb-3 border-b border-gray-700 pb-1">🎤 نظام التحدث الصوتي</h3>
@@ -341,6 +341,15 @@ li.innerHTML = `<span class="font-medium">${p.username}${votes} ${p.dead ? '☠'
         }
         list.appendChild(li);
     });
+    // عرض تفاصيل التصويت
+const log = document.getElementById("votes-log");
+log.innerHTML = "";
+
+Object.entries(voteDetails).forEach(([voter, target]) => {
+    const div = document.createElement("div");
+    div.textContent = `${voter} ➜ ${target}`;
+    log.appendChild(div);
+});
 });
 
 function sendMessage() {
