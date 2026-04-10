@@ -258,7 +258,7 @@ io.on("connection", (socket) => {
 
   // ✅ نحفظ عدد المافيا
   room.mafiaCount = mafiaCount || 1;
-
+io.to(roomId).emit("mafiaCount", room.mafiaCount);
   room.roles = assignRoles(room.players, room.mafiaCount);
 
   room.players.forEach(p => { 
