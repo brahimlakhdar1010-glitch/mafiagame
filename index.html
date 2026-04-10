@@ -301,10 +301,7 @@ socket.on("newsUpdate", msg => {
     setTimeout(() => bar.classList.add("hidden"), 10000);
 });
     
-socket.on("voteUpdate", (data) => {
-    voteCounts = data.tally || {};
-    voteDetails = data.detailedVotes || {};
-});
+
 socket.on("phaseUpdate", phase => {
     currentPhase = phase;
     const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
