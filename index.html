@@ -453,13 +453,17 @@ socket.on("gameOver", winner => {
 // ===== نظام الصوت الاحترافي =====
 async function initializeAudio() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: { 
-                echoCancellation: true, 
-                noiseSuppression: true,
-                autoGainControl: true 
-            } 
-        });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+    audio: {
+        echoCancellation: true,        // إزالة الصدى
+        noiseSuppression: true,        // إزالة الضجيج
+        autoGainControl: true,         // ضبط الصوت تلقائي
+
+        sampleRate: 48000,             // جودة عالية مثل Discord
+        channelCount: 1,               // مونو (أفضل للأداء)
+        latency: 0.01,                 // تقليل التأخير
+    }
+});  
         
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
