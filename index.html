@@ -277,6 +277,10 @@ socket.on("newsUpdate", msg => {
     bar.classList.remove("hidden");
     bar.textContent = msg;
     setTimeout(() => bar.classList.add("hidden"), 10000);
+    // 🔊 صوت درامي
+const audio = new Audio("https://www.soundjay.com/horror/sounds/horror-scream-01.mp3");
+audio.volume = 0.3;
+audio.play();
 });
 
 socket.on("phaseUpdate", phase => {
@@ -394,6 +398,9 @@ function createRoom() {
 }
 // ✅ إصلاح استدعاء الدالة الصحيح
 function joinRoom() { 
+    if (document.getElementById("username").value === "host") {
+    isLeader = true;
+}
     const roomId = document.getElementById("roomId").value.trim(); // ✅ إزالة المسافات
     const username = document.getElementById("username").value.trim();
     const password = document.getElementById("password").value;
@@ -581,25 +588,40 @@ socket.on("receiveVoiceMessage", (data) => {
     // ===== 🎧 WebRTC صوت مباشر =====
 let peerConnections = {};
 let localStream;
-
+let isLeader = false;
 // تشغيل الصوت المباشر
 async function startLiveVoice() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        // 🎧 فلتر تحسين الصوت (ضعه هنا بالضبط)
         const audioCtx = new AudioContext();
         const source = audioCtx.createMediaStreamSource(localStream);
 
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = 1.2; // رفع الصوت قليلاً
+        // 🎚️ فلتر المافيا (صوت غامض)
+        let currentNode = source;
 
-        source.connect(gainNode);
+        if (myRole === "mafia") {
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = "lowpass";
+            filter.frequency.value = 1000;
 
+            currentNode.connect(filter);
+            currentNode = filter;
+        }
+
+        // 🎤 رفع صوت القائد
+        if (isLeader) {
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 2.0;
+
+            currentNode.connect(gainNode);
+            currentNode = gainNode;
+        }
+
+        // 🔊 الصوت النهائي
         const destination = audioCtx.createMediaStreamDestination();
-        gainNode.connect(destination);
+        currentNode.connect(destination);
 
-        // 🔥 استبدال الصوت بالصوت المحسن
         localStream = destination.stream;
 
         socket.emit("joinVoice", { roomId: currentRoom });
@@ -607,6 +629,14 @@ async function startLiveVoice() {
     } catch (e) {
         console.error("خطأ الصوت المباشر", e);
     }
+}
+    if (myRole === "mafia") {
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1000;
+
+    source.connect(filter);
+}
 }
 }
 
