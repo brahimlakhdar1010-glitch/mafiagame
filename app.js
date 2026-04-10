@@ -234,18 +234,25 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("newsUpdate", `${username} انضم للغرفة! 👋`);
   });
 
-  socket.on("startGame", (roomId) => {
-    const room = rooms[roomId];
-    if (!room || room.gameStarted) return;
-    room.gameStarted = true;
-    room.phase = "night";
-    room.roles = assignRoles(room.players);
-    room.players.forEach(p => { 
-      io.to(p.id).emit("roleAssigned", room.roles[p.id]); 
-    });
-    io.to(roomId).emit("phaseUpdate", room.phase);
-    startTimer(roomId, 30);
+  socket.on("startGame", ({ roomId, mafiaCount }) => {
+  const room = rooms[roomId];
+  if (!room || room.gameStarted) return;
+
+  room.gameStarted = true;
+  room.phase = "night";
+
+  // ✅ نحفظ عدد المافيا
+  room.mafiaCount = mafiaCount || 1;
+
+  room.roles = assignRoles(room.players, room.mafiaCount);
+
+  room.players.forEach(p => { 
+    io.to(p.id).emit("roleAssigned", room.roles[p.id]); 
   });
+
+  io.to(roomId).emit("phaseUpdate", room.phase);
+  startTimer(roomId, 30);
+});
 
   socket.on("chatMessage", ({ roomId, msg }) => {
     const room = rooms[roomId];
