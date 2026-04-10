@@ -76,7 +76,26 @@ function resolveNight(roomId) {
   const room = rooms[roomId];
   if (!room) return;
 
-  let killedId = room.nightAction.mafia;
+ let killedId = null;
+
+// حساب تصويت المافيا
+if (room.nightAction.mafiaVotes) {
+  let tally = {};
+  Object.values(room.nightAction.mafiaVotes).forEach(v => {
+    tally[v] = (tally[v] || 0) + 1;
+  });
+
+  let sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+
+  if (sorted.length > 0) {
+    // تحقق من التعادل
+    if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) {
+      killedId = null; // ❌ تعادل = لا قتل
+    } else {
+      killedId = sorted[0][0];
+    }
+  }
+}
   let protectedId = room.nightAction.doctor;
   let news = "مرت الليلة بهدوء...";
 
@@ -89,7 +108,7 @@ function resolveNight(roomId) {
   }
 
   room.phase = "day";
-  room.nightAction = { mafia: null, doctor: null };
+  room.nightAction = { mafiaVotes: {}, doctor: null };
   io.to(roomId).emit("newsUpdate", news);
   io.to(roomId).emit("phaseUpdate", room.phase);
   io.to(roomId).emit("updatePlayers", room.players);
@@ -106,7 +125,17 @@ function resolveDay(roomId) {
   let tally = {};
   Object.values(room.votes).forEach(v => { if (v) tally[v] = (tally[v] || 0) + 1; });
 
-  let eliminated = Object.keys(tally).sort((a,b) => tally[b] - tally[a])[0];
+let eliminated = null;
+
+let sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+
+if (sorted.length > 0) {
+  if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) {
+    eliminated = null; // ❌ تعادل = لا إقصاء
+  } else {
+    eliminated = sorted[0][0];
+  }
+}
   let news = "لم يتم إقصاء أحد اليوم.";
 
   if (eliminated) {
@@ -226,7 +255,23 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("receiveMessage", { user: player.username, msg: msg });
     }
   });
+socket.on("mafiaMessage", ({ roomId, msg }) => {
+  const room = rooms[roomId];
+  if (!room) return;
 
+  const sender = room.players.find(p => p.id === socket.id);
+  if (!sender || sender.dead) return;
+
+  // إرسال فقط للمافيا
+  room.players.forEach(p => {
+    if (room.roles[p.id] === "mafia") {
+      io.to(p.id).emit("receiveMafiaMessage", {
+        user: sender.username,
+        msg
+      });
+    }
+  });
+});
   socket.on("voiceMessage", ({ roomId, audioData, sender }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -236,14 +281,17 @@ io.on("connection", (socket) => {
         audioData: audioData,
         sender: sender,
         timestamp: new Date().toLocaleTimeString('ar-SA')
-      });
+     });
     }
   });
 
   socket.on("action", ({ roomId, targetId, type }) => {
     const room = rooms[roomId];
     if (!room || room.phase !== "night") return;
-    if (type === "mafia") room.nightAction.mafia = targetId;
+   if (type === "mafia") {
+  if (!room.nightAction.mafiaVotes) room.nightAction.mafiaVotes = {};
+  room.nightAction.mafiaVotes[socket.id] = targetId;
+}
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
       const targetRole = room.roles[targetId];
