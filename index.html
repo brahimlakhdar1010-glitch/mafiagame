@@ -492,7 +492,13 @@ function startGame() {
     const mafiaCount = document.getElementById("mafia-count").value;
     socket.emit("startGame", { roomId: currentRoom, mafiaCount: Number(mafiaCount) });
 }
-function endDay() { socket.emit("endDay", currentRoom); }
+function endDay() { 
+  if (!currentRoom) {
+    alert("❌ الغرفة غير محددة");
+    return;
+  }
+  socket.emit("endDay", currentRoom); 
+}
 
 socket.on("roomCreated", d => { 
     currentRoom = d.roomId; 
