@@ -496,10 +496,16 @@ function startGame() {
     socket.emit("startGame", { roomId: currentRoom, mafiaCount: Number(mafiaCount) });
 }
 function endDay() { 
+  if (isDead) {
+    alert("❌ لا يمكنك إنهاء التصويت، أنت ميت!");
+    return;
+  }
+
   if (!currentRoom) {
     alert("❌ الغرفة غير محددة");
     return;
   }
+
   socket.emit("endDay", currentRoom); 
 }
 
