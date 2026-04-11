@@ -354,8 +354,11 @@ const log = document.getElementById("votes-log");
 log.innerHTML = "";
 
 Object.entries(voteDetails).forEach(([voter, target]) => {
+    const voterName = players.find(p => p.id === voter)?.username || voter;
+    const targetName = players.find(p => p.id === target)?.username || target;
+
     const div = document.createElement("div");
-    div.textContent = `${voter} ➜ ${target}`;
+    div.textContent = `${voterName} ➜ ${targetName}`;
     log.appendChild(div);
 });
 });
