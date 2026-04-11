@@ -202,7 +202,8 @@ io.on("connection", (socket) => {
     console.log(`✅ [${socket.id}] أنشأ غرفة: ${roomId}`);
     console.log(`📊 الغرف الموجودة الآن:`, Object.keys(rooms));
     
-    socket.emit("roomCreated", { roomId });
+  socket.on("roomCreated", d => { 
+  currentRoom = d.roomId;
 
     io.to(roomId).emit("updatePlayers", rooms[roomId].players);
   });
