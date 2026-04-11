@@ -324,26 +324,37 @@ socket.on("mafiaMessage", ({ roomId, msg }) => {
       socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`);
     }
   });
-
 socket.on("vote", ({ roomId, targetId }) => {
   const room = rooms[roomId];
   if (!room || room.phase !== "day") return;
 
-  // حفظ التصويت
   room.votes[socket.id] = targetId;
 
-  // حساب عدد الأصوات
   let tally = {};
   Object.values(room.votes).forEach(v => {
     tally[v] = (tally[v] || 0) + 1;
   });
 
-  // إرسال النتائج بشكل صحيح
   io.to(roomId).emit("voteUpdate", {
     tally: tally,
     detailedVotes: room.votes
   });
+
+  // 👇 أضف هذا السطر هنا
+  io.to(roomId).emit("updatePlayers", room.players);
 });
+
+
+// 👇 ضع الكود هنا (داخل io.on)
+socket.on("getPlayersUpdate", () => {
+  for (let roomId in rooms) {
+    const room = rooms[roomId];
+    if (room.players.find(p => p.id === socket.id)) {
+      io.to(roomId).emit("updatePlayers", room.players);
+    }
+  }
+});
+
 
   // WebRTC Signaling
   socket.on("webrtc-offer", ({ roomId, offer }) => {
