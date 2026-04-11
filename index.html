@@ -506,6 +506,11 @@ function endDay() {
     return;
   }
 
+  // ✅ إضافة التأكيد هنا
+  const confirmEnd = confirm("⚠️ هل أنت متأكد من إنهاء التصويت مبكراً؟");
+
+  if (!confirmEnd) return;
+
   socket.emit("endDay", currentRoom); 
 }
 
