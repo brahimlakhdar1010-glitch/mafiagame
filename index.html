@@ -678,10 +678,12 @@ socket.on("webrtc-offer", async ({ offer, from }) => {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
- 
-socket.on("voteUpdate", (data) => {
-    voteCounts = data.tally;
-    voteDetails = data.detailedVotes;
+ socket.on("voteUpdate", (data) => {
+    voteCounts = data.tally || {};
+    voteDetails = data.detailedVotes || {};
+
+    // 🔥 هذا السطر هو الحل
+    socket.emit("getPlayersUpdate");
 });
 
     socket.emit("webrtc-answer", {
