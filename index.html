@@ -358,7 +358,7 @@ Object.entries(voteDetails).forEach(([voter, target]) => {
     const targetName = players.find(p => p.id === target)?.username || target;
 
     const div = document.createElement("div");
-    div.textContent = `${voterName} ➜ ${targetName}`;
+    div.textContent = `${voterName} صوت على➜ ${targetName}`;
     log.appendChild(div);
 });
 });
