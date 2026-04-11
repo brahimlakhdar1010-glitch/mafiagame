@@ -177,7 +177,12 @@ if (sorted.length > 0) {
 io.on("connection", (socket) => {
   console.log(`🔗 [${socket.id}] اتصل جديد`);
   console.log(`📊 الغرف الموجودة حالياً:`, Object.keys(rooms));
+socket.on("endDay", (roomId) => {
+  const room = rooms[roomId];
+  if (!room) return;
 
+  resolveDay(roomId);
+});
   // ✅ إضافة قائمة الغرف النشطة
   socket.on("getRooms", () => {
     socket.emit("roomsList", Object.keys(rooms));
