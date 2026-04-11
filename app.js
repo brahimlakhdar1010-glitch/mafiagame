@@ -136,7 +136,7 @@ if (room.nightAction.mafiaVotes) {
 function resolveDay(roomId) {
   const room = rooms[roomId];
   if (!room) return;
-
+clearInterval(room.timerInterval);
   let tally = {};
   Object.values(room.votes).forEach(v => { if (v) tally[v] = (tally[v] || 0) + 1; });
 
