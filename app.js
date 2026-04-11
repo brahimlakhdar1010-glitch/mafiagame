@@ -130,7 +130,7 @@ if (room.nightAction.mafiaVotes) {
 
   const winner = checkWin(room);
   if (winner) io.to(roomId).emit("gameOver", winner);
-  else startTimer(roomId, 240);
+  else startTimer(roomId, 360);
 }
 
 function resolveDay(roomId) {
