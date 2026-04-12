@@ -742,6 +742,22 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
     // 🔥 هذا السطر هو الحل
     socket.emit("getPlayersUpdate");
 });  
+    function shareGame() {
+    if (!currentRoom) {
+        alert("❌ يجب إنشاء غرفة أولاً");
+        return;
+    }
+
+    const link = `${window.location.origin}?room=${currentRoom}`;
+
+    navigator.clipboard.writeText(link)
+        .then(() => {
+            alert("✅ تم نسخ رابط الغرفة! أرسله لأصدقائك 🎉");
+        })
+        .catch(() => {
+            alert("❌ لم يتم النسخ");
+        });
+}
 </script>
 </body>
 </html>
