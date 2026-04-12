@@ -197,7 +197,7 @@ socket.on("endDay", (roomId) => {
       gameStarted: false,
       votes: {}, 
       roles: {}, 
-      nightAction: { mafia: null, doctor: null },
+      nightAction: { mafiaVotes: {}, doctor: null, policeUsed: {} },
       timeLeft: 0, 
       timerInterval: null
     };
@@ -326,10 +326,21 @@ socket.on("mafiaMessage", ({ roomId, msg }) => {
 }
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
-      const targetRole = room.roles[targetId];
-      socket.emit("newsUpdate", `نتيجة التحقيق: الشخص هو ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`);
-    }
-  });
+  // ❌ إذا استخدم قدرته بالفعل
+  if (room.nightAction.policeUsed[socket.id]) {
+    socket.emit("newsUpdate", "❌ يمكنك التحقيق مرة واحدة فقط في كل ليلة!");
+    return;
+  }
+
+  const targetRole = room.roles[targetId];
+
+  socket.emit("newsUpdate",
+    `🔍 نتيجة التحقيق: ${targetRole === 'mafia' ? 'مافيا 👿' : 'مواطن 👤'}`
+  );
+
+  // ✅ تسجيل أنه استخدم قدرته
+  room.nightAction.policeUsed[socket.id] = true;
+}
 socket.on("vote", ({ roomId, targetId }) => {
   const room = rooms[roomId];
   if (!room || room.phase !== "day") return;
