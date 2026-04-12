@@ -193,16 +193,27 @@ h1 {
 </h1>
     <div id="timer-display" class="hidden text-3xl md:text-4xl font-mono text-red-500 mb-4 bg-black p-2 rounded shadow-lg border-2 border-red-900">00:00</div>
     <div id="news-bar" class="bg-blue-900 p-2 my-2 rounded hidden italic text-sm md:text-base"></div>
+<div id="setup-area" class="space-y-2">
+    <input id="username" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="اسم المستخدم" />
+    <input id="password" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="كلمة المرور" />
+    <br>
 
-    <div id="setup-area" class="space-y-2">
-        <input id="username" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="اسم المستخدم" />
-        <input id="password" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="كلمة المرور" />
-        <br>
-        <button onclick="createRoom()" class="bg-blue-500 w-full md:w-auto px-4 py-2 rounded font-bold">إنشاء غرفة</button>
-        <div class="py-2 text-gray-500">أو</div>
-        <input id="roomId" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="رقم الغرفة" />
-        <button onclick="joinRoom()" class="bg-green-500 w-full md:w-auto px-4 py-2 rounded font-bold">انضمام للغرفة</button>
-    </div>
+    <button onclick="createRoom()" class="bg-blue-500 w-full md:w-auto px-4 py-2 rounded font-bold">
+        إنشاء غرفة
+    </button>
+
+    <!-- ✅ هنا تضيف زر المشاركة -->
+    <button onclick="shareGame()" class="bg-indigo-500 w-full md:w-auto px-4 py-2 rounded font-bold">
+        🔗 مشاركة اللعبة
+    </button>
+
+    <div class="py-2 text-gray-500">أو</div>
+
+    <input id="roomId" class="w-full md:w-auto p-2 text-black text-right rounded" placeholder="رقم الغرفة" />
+    <button onclick="joinRoom()" class="bg-green-500 w-full md:w-auto px-4 py-2 rounded font-bold">
+        انضمام للغرفة
+    </button>
+</div>
 
     <hr class="my-4 border-gray-700">
     <h2 class="text-lg md:text-xl">المرحلة الحالية: <span id="phase-text" class="text-blue-400">الانتظار</span></h2>
