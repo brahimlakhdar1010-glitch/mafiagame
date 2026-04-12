@@ -327,7 +327,8 @@ socket.on("mafiaMessage", ({ roomId, msg }) => {
     if (type === "doctor") room.nightAction.doctor = targetId;
     if (type === "police") {
   // ❌ إذا استخدم قدرته بالفعل
-  if (room.nightAction.policeUsed[socket.id]) {
+    }
+    if (room.nightAction.policeUsed[socket.id]) {
     socket.emit("newsUpdate", "❌ يمكنك التحقيق مرة واحدة فقط في كل ليلة!");
     return;
   }
