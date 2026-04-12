@@ -341,6 +341,7 @@ socket.on("mafiaMessage", ({ roomId, msg }) => {
   // ✅ تسجيل أنه استخدم قدرته
   room.nightAction.policeUsed[socket.id] = true;
 }
+  });
 socket.on("vote", ({ roomId, targetId }) => {
   const room = rooms[roomId];
   if (!room || room.phase !== "day") return;
