@@ -185,12 +185,8 @@ h1 {
 </style>
 </head>
 <body class="bg-gray-900 text-white p-4 md:p-6 text-right">
-    <div id="splash-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;z-index:9999;display:flex;justify-content:center;align-items:center;">
-   <img src="mafia.jpg" class="w-full h-full object-cover">
-</div>
     <div id="loading" class="hidden">جارٍ تحميل اللعبة...</div>
-<div id="game-content" class="hidden">
-    <div class="max-w-xl mx-auto text-center card p-4">
+<div class="max-w-xl mx-auto text-center card p-4">
     
     <h1 class="text-2xl md:text-3xl font-bold mb-4 bg-gradient-to-r from-blue-500 to-green-400 text-transparent bg-clip-text">
 🎭 Mafia Pro | Lakhdar
@@ -217,7 +213,6 @@ h1 {
     <button onclick="joinRoom()" class="bg-green-500 w-full md:w-auto px-4 py-2 rounded font-bold">
         انضمام للغرفة
     </button>
-    
 </div>
 
     <hr class="my-4 border-gray-700">
@@ -564,22 +559,23 @@ async function initializeAudio() {
         mediaRecorder.ondataavailable = (e) => {
             if (e.data.size > 0) recordedChunks.push(e.data);
         };
-       mediaRecorder.onstop = sendVoiceToServer;
-        function sendVoiceToServer() {
-    const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-    recordedChunks = [];
-
-    if (!currentRoom || isDead) return;
-
-    socket.emit("voiceMessage", {
-        roomId: currentRoom,
-        audioData: blob,
-        sender: document.getElementById("username").value
-    });
-
-    voiceStatusText.textContent = "✅ جاهز";
-}
-       
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+            recordedChunks = [];
+            
+            if (currentRoom && !isDead) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    socket.emit("voiceMessage", {
+                        roomId: currentRoom,
+                        audioData: reader.result,
+                        sender: document.getElementById("username").value
+                    });
+                };
+                reader.readAsArrayBuffer(audioBlob);
+            }
+        };
         
         voiceSetup.classList.remove('hidden');
         voiceStatusText.textContent = '✅ الميكروفون جاهز';
@@ -591,66 +587,40 @@ async function initializeAudio() {
     }
 }
 
-micBtn.addEventListener("pointerdown", startRecording);
-micBtn.addEventListener("pointerup", stopRecording);
-micBtn.addEventListener("pointercancel", stopRecording);
+// تشغيل الميكروفون عند الضغط
+micBtn.addEventListener('mousedown', startRecording);
+document.addEventListener('mouseup', stopRecording);
+
+// دعم الهاتف 📱
+micBtn.addEventListener('touchstart', startRecording);
+document.addEventListener('touchend', stopRecording);
+
 function startRecording() {
-    if (isRecording) return;
-    if (!mediaRecorder || isDead) return;
-
-    isRecording = true;
-    recordedChunks = [];
-
-    mediaRecorder.start(250);
-
-    micBtn.classList.add("recording");
-    voiceStatusText.textContent = "🔴 تسجيل...";
-
-    startVolumeMonitor();
-}
-function stopRecording() {
-    if (!isRecording) return;
-
-    isRecording = false;
-
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
+    if (!isRecording && mediaRecorder && !isDead) {
+        isRecording = true;
+        recordedChunks = [];
+        mediaRecorder.start();
+        micBtn.classList.add('recording');
+        voiceStatusText.textContent = '🔴 جاري التسجيل...';
+        startVolumeMonitor();
     }
+}
 
-    micBtn.classList.remove("recording");
-    voiceStatusText.textContent = "⏳ إرسال...";
-
-    stopVolumeMonitor();
+function stopRecording() {
+    if (isRecording && mediaRecorder) {
+        isRecording = false;
+        mediaRecorder.stop();
+        micBtn.classList.remove('recording');
+        voiceStatusText.textContent = '✅ جاري الإرسال...';
+        setTimeout(() => { 
+            voiceStatusText.textContent = '✅ الميكروفون جاهز'; 
+        }, 1500);
+    }
 }
 // رصد مستوى الصوت
-let volumeAnimation;
-
 function startVolumeMonitor() {
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    function update() {
-        if (!isRecording) return;
-
-        analyser.getByteFrequencyData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-        }
-
-        let avg = sum / dataArray.length;
-
-        volumeBar.style.width = Math.min(100, (avg / 128) * 100) + "%";
-
-        volumeAnimation = requestAnimationFrame(update);
-    }
-
-    update();
-}
-  function stopVolumeMonitor() {
-    cancelAnimationFrame(volumeAnimation);
-    volumeBar.style.width = "0%";
-}  
+    
     function monitor() {
         if (!isRecording) return;
         analyser.getByteFrequencyData(dataArray);
@@ -788,27 +758,6 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
             alert("❌ لم يتم النسخ");
         });
 }
- window.addEventListener("load", () => {
-    setTimeout(() => {
-        const splash = document.getElementById("splash-screen");
-        const game = document.getElementById("game-content");
-
-        splash.style.transition = "opacity 1s";
-        splash.style.opacity = "0";
-splash.style.pointerEvents = "none";
-        setTimeout(() => {
-            splash.style.display = "none";
-
-            // 🔥 هذا هو الإصلاح الحقيقي
-           game.style.display = "block";
-game.style.opacity = "1";
-game.style.visibility = "visible"; 
-        }, 1000);
-
-    }, 3000);
-});
 </script>
-</div>
-</div>        
 </body>
 </html>
