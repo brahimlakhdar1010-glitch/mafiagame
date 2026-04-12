@@ -763,6 +763,19 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
             alert("❌ لم يتم النسخ");
         });
 }
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+        const splash = document.getElementById("splash-screen");
+        splash.style.transition = "opacity 1s";
+        splash.style.opacity = "0";
+
+        setTimeout(() => {
+            splash.style.display = "none";
+            document.getElementById("game-content").classList.remove("hidden");
+        }, 1000);
+
+    }, 5000);
+});  
 </script>
 </div>
 </div>        
