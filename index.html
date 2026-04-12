@@ -770,12 +770,13 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
         splash.style.opacity = "0";
 
         setTimeout(() => {
-            splash.style.display = "none";
-            document.getElementById("game-content").classList.remove("hidden");
-        }, 1000);
+            splash.style.display = "none"; // إخفاء الشاشة
+            document.getElementById("game-content").style.display = "block"; // التأكد من أن اللعبة مرئية
+        }, 1000); // نفس الوقت مع التأثير
 
     }, 5000);
-});  
+});
+
 </script>
 </div>
 </div>        
