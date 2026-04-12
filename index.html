@@ -189,7 +189,7 @@ h1 {
    <img src="mafia.jpg" class="w-full h-full object-cover">
 </div>
     <div id="loading" class="hidden">جارٍ تحميل اللعبة...</div>
-<div id="game-content" style="display:none;">
+<div id="game-content" class="hidden">
     <div class="max-w-xl mx-auto text-center card p-4">
     
     <h1 class="text-2xl md:text-3xl font-bold mb-4 bg-gradient-to-r from-blue-500 to-green-400 text-transparent bg-clip-text">
@@ -795,12 +795,14 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
 
         splash.style.transition = "opacity 1s";
         splash.style.opacity = "0";
-
+splash.style.pointerEvents = "none";
         setTimeout(() => {
             splash.style.display = "none";
 
             // 🔥 هذا هو الإصلاح الحقيقي
-            game.style.display = "block";
+           game.style.display = "block";
+game.style.opacity = "1";
+game.style.visibility = "visible"; 
         }, 1000);
 
     }, 3000);
