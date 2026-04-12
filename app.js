@@ -123,7 +123,7 @@ if (room.nightAction.mafiaVotes) {
   }
 
   room.phase = "day";
-  room.nightAction = { mafiaVotes: {}, doctor: null };
+  room.nightAction = { mafiaVotes: {}, doctor: null , policeUsed: {} };
   io.to(roomId).emit("newsUpdate", news);
   io.to(roomId).emit("phaseUpdate", room.phase);
   io.to(roomId).emit("updatePlayers", room.players);
