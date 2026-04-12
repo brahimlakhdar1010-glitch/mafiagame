@@ -763,19 +763,23 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
             alert("❌ لم يتم النسخ");
         });
 }
-  window.addEventListener("load", () => {
+ window.addEventListener("load", () => {
     setTimeout(() => {
         const splash = document.getElementById("splash-screen");
+        const game = document.getElementById("game-content");
+
         splash.style.transition = "opacity 1s";
         splash.style.opacity = "0";
 
         setTimeout(() => {
             splash.style.display = "none";
-            document.getElementById("game-content").classList.remove("hidden");
+
+            // 🔥 هذا هو الإصلاح الحقيقي
+            game.style.display = "block";
         }, 1000);
 
-    }, 5000);
-});  
+    }, 3000);
+});
 </script>
 </div>
 </div>        
