@@ -182,46 +182,20 @@ h1 {
         height: 32px;
         margin-top: 5px;
     }
-    @keyframes fadeIn {
-  from { opacity:0; transform: translateY(20px); }
-  to { opacity:1; transform: translateY(0); }
-}
 </style>
 </head>
     
-<div id="splash-screen" style="
-  position:fixed;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  z-index:9999;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  flex-direction:column;
-">
 
-  <!-- الصورة -->
- <img src="mafia.jpg" style="
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%, -50%);
-  max-width:100%;
-  max-height:100%;
-     z-index:1;
-">
-  <!-- زر البداية -->
-<button onclick="startGameScreen()" id="start-btn-splash">
-▶ ابدأ اللعبة
-</button>
+   <div id="splash-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;z-index:9999;display:flex;justify-content:center;align-items:center;">
+   <img src="mafia.jpg" style="width:100%; height:100%; object-fit:cover;">
 </div>
+ 
+    
    <body class="bg-gray-900 text-white p-4 md:p-6 text-right">  
     <div id="loading" class="hidden">جارٍ تحميل اللعبة...</div>
 <div id="game-content" style="display:none;">
     <div class="max-w-xl mx-auto text-center card p-4">
-
+    
     <h1 class="text-2xl md:text-3xl font-bold mb-4 bg-gradient-to-r from-blue-500 to-green-400 text-transparent bg-clip-text">
 🎭 Mafia Pro | Lakhdar
 </h1>
@@ -298,11 +272,9 @@ placeholder="عدد المافيا">
         <button id="end-day-btn" onclick="endDay()" class="bg-yellow-600 w-full py-2 rounded hidden font-bold">إنهاء التصويت مبكراً</button>
     </div>
 </div>
-<script src="/socket.io/socket.io.js"></script>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
-    
-console.log("JS يعمل");
 const socket = io();
     let voteCounts = {};
 let voteDetails = {};
@@ -312,7 +284,7 @@ let voteDetails = {};
     div.classList.remove("hidden");
 });
 let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
-let peerConnections = {};
+
 // ===== متغيرات الصوت =====
 let mediaRecorder;
 let audioContext;
@@ -360,7 +332,7 @@ socket.on("phaseUpdate", phase => {
     else endDayBtn.classList.add("hidden");
 
     refreshUI();
-}); 
+});
 
 socket.on("updatePlayers", players => {
     const list = document.getElementById("players-list");
@@ -371,10 +343,7 @@ socket.on("updatePlayers", players => {
         isDead = true;
         document.getElementById("chat-input").disabled = true;
         document.getElementById("chat-input").placeholder = "أنت ميت...";
-   if (peerConnections[p.id]) {
-    peerConnections[p.id].close();
-    delete peerConnections[p.id];
-} }
+    }
 
     players.forEach(p => {
         const li = document.createElement("li");
@@ -468,7 +437,15 @@ function refreshUI() {
     }
 }
 
-
+socket.on("roleAssigned", role => {
+    myRole = role;
+    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
+    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
+    document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("controls").classList.remove("hidden");
+    document.getElementById("start-btn").classList.add("hidden");
+    document.getElementById("chat-area").classList.remove("hidden");
+});
 
 function createRoom() {
     const user = document.getElementById("username").value;
@@ -503,7 +480,7 @@ socket.on("joinedRoomSuccess", (data) => {
     document.getElementById("chat-area").classList.remove("hidden");
     document.getElementById("voice-setup").classList.remove("hidden");
     initializeAudio();
-    startLiveVoice();// ✅ اسم صحيح
+    startLiveVoice();
 });
 
 // ✅ استقبال الخطأ مع تفاصيل
@@ -512,7 +489,14 @@ socket.on("joinError", (msg) => {
     alert("❌ فشل الدخول:\n" + msg); 
 });
 
-
+// ✅ تأكيد نجاح الانضمام قبل تشغيل الصوت
+socket.on("joinedRoomSuccess", (data) => {
+    console.log("✅ تم الانضمام بنجاح:", data);
+    document.getElementById("chat-area").classList.remove("hidden");
+    document.getElementById("setup-area").classList.add("hidden");
+    initializeAudio();
+    startLiveVoice();  // ✅ اسم صحيح
+});
 
 // ✅ إصلاح عند تلقي أدوار اللعب
 socket.on("roleAssigned", role => {
@@ -568,20 +552,39 @@ async function initializeAudio() {
             audio: { 
                 echoCancellation: true, 
                 noiseSuppression: true,
-                autoGainControl: true,
-                sampleRate: 44100
+                autoGainControl: true 
             } 
         });
         
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        audioContext.resume();
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
         
         microphone = audioContext.createMediaStreamSource(stream);
         microphone.connect(analyser);
         
-       
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+            recordedChunks = [];
+            
+            if (currentRoom && !isDead) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    socket.emit("voiceMessage", {
+                        roomId: currentRoom,
+                        audioData: reader.result,
+                        sender: document.getElementById("username").value
+                    });
+                };
+                reader.readAsArrayBuffer(audioBlob);
+            }
+        };
         
         voiceSetup.classList.remove('hidden');
         voiceStatusText.textContent = '✅ الميكروفون جاهز';
@@ -605,7 +608,7 @@ function startRecording() {
     if (!isRecording && mediaRecorder && !isDead) {
         isRecording = true;
         recordedChunks = [];
-        mediaRecorder.start(1000);
+        mediaRecorder.start();
         micBtn.classList.add('recording');
         voiceStatusText.textContent = '🔴 جاري التسجيل...';
         startVolumeMonitor();
@@ -638,13 +641,72 @@ function startVolumeMonitor() {
 }
 
 // استقبال الرسائل الصوتية
-
+socket.on("receiveVoiceMessage", (data) => {
+    const box = document.getElementById("chat-box");
+    const div = document.createElement("div");
+    div.className = "voice-message";
+    
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = URL.createObjectURL(new Blob([data.audioData], { type: 'audio/webm' }));
+    
+    div.innerHTML = `<span class="text-yellow-400 font-bold text-xs">🎤 ${data.sender}</span>`;
+    div.appendChild(audio);
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+});
     // ===== 🎧 WebRTC صوت مباشر =====
 let peerConnections = {};
 let localStream;
 
+// تشغيل الصوت المباشر
+async function startLiveVoice() {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+        socket.emit("joinVoice", { roomId: currentRoom });
 
+    } catch (e) {
+        console.error("خطأ الصوت المباشر", e);
+    }
+}
+
+// إنشاء اتصال مع كل لاعب
+socket.on("updatePlayers", players => {
+    players.forEach(async (p) => {
+        if (p.id === myId) return;
+
+        const pc = new RTCPeerConnection();
+
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+        pc.ontrack = (event) => {
+            const audio = document.createElement("audio");
+            audio.srcObject = event.streams[0];
+            audio.autoplay = true;
+            document.body.appendChild(audio);
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.emit("webrtc-ice-candidate", {
+                    roomId: currentRoom,
+                    candidate: event.candidate
+                });
+            }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket.emit("webrtc-offer", {
+            roomId: currentRoom,
+            offer: offer
+        });
+
+        peerConnections[p.id] = pc;
+    });
+});
 
 // استقبال Offer
 socket.on("webrtc-offer", async ({ offer, from }) => {
@@ -680,11 +742,7 @@ socket.on("webrtc-answer", async ({ answer, from }) => {
 
 // ICE
 socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
-    if (peerConnections[from]) {
-        peerConnections[from].addIceCandidate(
-            new RTCIceCandidate(candidate)
-        );
-    }
+    peerConnections[from].addIceCandidate(new RTCIceCandidate(candidate));
 });
    socket.on("voteUpdate", (data) => {
     voteCounts = data.tally || {};
@@ -709,22 +767,20 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
             alert("❌ لم يتم النسخ");
         });
 }
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+        const splash = document.getElementById("splash-screen");
+        splash.style.transition = "opacity 1s";
+        splash.style.opacity = "0";
 
-function startGameScreen() {
-  const splash = document.getElementById("splash-screen");
+        setTimeout(() => {
+            splash.style.display = "none"; // إخفاء الشاشة
+            document.getElementById("game-content").style.display = "block"; // التأكد من أن اللعبة مرئية
+        }, 1000); // نفس الوقت مع التأثير
 
-  splash.style.transition = "opacity 1s";
-  splash.style.opacity = "0";
+    }, 5000);
+});
 
-  setTimeout(() => {
-    splash.style.display = "none";
-    document.getElementById("game-content").style.display = "block";
-  }, 500);
-}
-
-window.onload = () => {
-  document.getElementById("start-btn-splash").onclick = startGameScreen;
-};
 </script>
 </div>
 </div>        
