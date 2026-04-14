@@ -226,19 +226,8 @@ h1 {
   </h1>
 
   <!-- زر البداية -->
-  <button onclick="startGameScreen()" style="
-    z-index:2;
-    padding:15px 30px;
-    font-size:18px;
-    background:linear-gradient(45deg,#3b82f6,#22c55e);
-    border:none;
-    border-radius:10px;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
-    box-shadow:0 0 15px rgba(0,0,0,0.5);
-    animation: fadeIn 3s ease;
-  ">
+ <button id="start-btn-splash">
+  
     ▶ ابدأ اللعبة
   </button>
 
@@ -323,7 +312,7 @@ h1 {
         <input id="mafia-count" type="number" min="1" value="1"
 class="w-full p-2 text-black rounded"
 placeholder="عدد المافيا">
-        <button id="start-btn" splash="startGame()" class="bg-purple-500 w-full py-2 rounded font-bold">بدء اللعبة</button>
+        <button id="start-btn" onclick="startGame()" class="bg-purple-500 w-full py-2 rounded font-bold">بدء اللعبة</button>
         <button id="end-day-btn" onclick="endDay()" class="bg-yellow-600 w-full py-2 rounded hidden font-bold">إنهاء التصويت مبكراً</button>
     </div>
 </div>
@@ -822,8 +811,22 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
             alert("❌ لم يتم النسخ");
         });
 }
- 
 
+function startGameScreen() {
+  const splash = document.getElementById("splash-screen");
+
+  splash.style.transition = "opacity 1s";
+  splash.style.opacity = "0";
+
+  setTimeout(() => {
+    splash.style.display = "none";
+    document.getElementById("game-content").style.display = "block";
+  }, 1000);
+}
+
+window.onload = () => {
+  document.getElementById("start-btn-splash").onclick = startGameScreen;
+};
 </script>
 </div>
 </div>        
