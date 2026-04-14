@@ -200,7 +200,6 @@ h1 {
   justify-content:center;
   align-items:center;
   flex-direction:column;
-  overflow:hidden;
 ">
 
   <!-- الصورة -->
@@ -210,23 +209,21 @@ h1 {
     height:100%;
     object-fit:cover;
     filter: brightness(40%);
+    z-index:1;
   ">
 
   <!-- العنوان -->
   <h1 style="
     z-index:2;
-    font-size:40px;
-    font-weight:bold;
     color:white;
-    text-shadow:0 0 20px black;
+    font-size:35px;
     margin-bottom:20px;
-    animation: fadeIn 2s ease;
   ">
     🎭 Mafia Pro Lakhdar
   </h1>
 
   <!-- زر البداية -->
- <button id="start-btn-splash">
+  <button id="start-btn-splash" style="
     z-index:2;
     padding:15px 30px;
     font-size:18px;
@@ -236,16 +233,11 @@ h1 {
     color:white;
     font-weight:bold;
     cursor:pointer;
-    box-shadow:0 0 15px rgba(0,0,0,0.5);
-    animation: fadeIn 3s ease;
   ">
     ▶ ابدأ اللعبة
   </button>
 
 </div>
-  
- 
-    
    <body class="bg-gray-900 text-white p-4 md:p-6 text-right">  
     <div id="loading" class="hidden">جارٍ تحميل اللعبة...</div>
 <div id="game-content" style="display:none;">
