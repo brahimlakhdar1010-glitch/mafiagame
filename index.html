@@ -213,18 +213,7 @@ h1 {
      z-index:1;
 ">
   <!-- زر البداية -->
-<button id="start-btn-splash" onclick="startGameScreen()" style="
-  z-index:10;
-  position:relative;
-  padding:15px 30px;
-  font-size:18px;
-  background:linear-gradient(45deg,#3b82f6,#22c55e);
-  border:none;
-  border-radius:10px;
-  color:white;
-  font-weight:bold;
-  cursor:pointer;
-">
+<button onclick="startGameScreen()" id="start-btn-splash">
 ▶ ابدأ اللعبة
 </button>
 </div>
@@ -730,7 +719,7 @@ function startGameScreen() {
   setTimeout(() => {
     splash.style.display = "none";
     document.getElementById("game-content").style.display = "block";
-  }, 1000);
+  }, 500);
 }
 
 window.onload = () => {
