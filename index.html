@@ -215,7 +215,7 @@ h1 {
  
 
   <!-- زر البداية -->
-  <button id="start-btn-splash" style="
+<button id="start-btn-splash" onclick="startGameScreen()">
     z-index:2;
     padding:15px 30px;
     font-size:18px;
@@ -311,9 +311,9 @@ placeholder="عدد المافيا">
         <button id="end-day-btn" onclick="endDay()" class="bg-yellow-600 w-full py-2 rounded hidden font-bold">إنهاء التصويت مبكراً</button>
     </div>
 </div>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
+<script src="/socket.io/socket.io.js"></script>
+
     
 console.log("JS يعمل");
 const socket = io();
