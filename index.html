@@ -323,7 +323,7 @@ let voteDetails = {};
     div.classList.remove("hidden");
 });
 let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
-
+let peerConnections = {};
 // ===== متغيرات الصوت =====
 let mediaRecorder;
 let audioContext;
@@ -371,8 +371,8 @@ socket.on("phaseUpdate", phase => {
     else endDayBtn.classList.add("hidden");
 
     refreshUI();
-});
-
+}); 
+انشاء اتصال مع كل لاعب//  
 socket.on("updatePlayers", players => {
     const list = document.getElementById("players-list");
     list.innerHTML = "";
@@ -382,7 +382,10 @@ socket.on("updatePlayers", players => {
         isDead = true;
         document.getElementById("chat-input").disabled = true;
         document.getElementById("chat-input").placeholder = "أنت ميت...";
-    }
+   if (peerConnections[p.id]) {
+    peerConnections[p.id].close();
+    delete peerConnections[p.id];
+} }
 
     players.forEach(p => {
         const li = document.createElement("li");
@@ -476,15 +479,7 @@ function refreshUI() {
     }
 }
 
-socket.on("roleAssigned", role => {
-    myRole = role;
-    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
-    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
-    document.getElementById("setup-area").classList.add("hidden");
-    document.getElementById("controls").classList.remove("hidden");
-    document.getElementById("start-btn").classList.add("hidden");
-    document.getElementById("chat-area").classList.remove("hidden");
-});
+
 
 function createRoom() {
     const user = document.getElementById("username").value;
@@ -591,39 +586,20 @@ async function initializeAudio() {
             audio: { 
                 echoCancellation: true, 
                 noiseSuppression: true,
-                autoGainControl: true 
+                autoGainControl: true,
+                sampleRate: 44100
             } 
         });
         
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioContext.resume();
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;
         
         microphone = audioContext.createMediaStreamSource(stream);
         microphone.connect(analyser);
         
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) recordedChunks.push(e.data);
-        };
-        
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
-            recordedChunks = [];
-            
-            if (currentRoom && !isDead) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    socket.emit("voiceMessage", {
-                        roomId: currentRoom,
-                        audioData: reader.result,
-                        sender: document.getElementById("username").value
-                    });
-                };
-                reader.readAsArrayBuffer(audioBlob);
-            }
-        };
+       
         
         voiceSetup.classList.remove('hidden');
         voiceStatusText.textContent = '✅ الميكروفون جاهز';
@@ -647,7 +623,7 @@ function startRecording() {
     if (!isRecording && mediaRecorder && !isDead) {
         isRecording = true;
         recordedChunks = [];
-        mediaRecorder.start();
+        mediaRecorder.start(1000);
         micBtn.classList.add('recording');
         voiceStatusText.textContent = '🔴 جاري التسجيل...';
         startVolumeMonitor();
@@ -680,72 +656,13 @@ function startVolumeMonitor() {
 }
 
 // استقبال الرسائل الصوتية
-socket.on("receiveVoiceMessage", (data) => {
-    const box = document.getElementById("chat-box");
-    const div = document.createElement("div");
-    div.className = "voice-message";
-    
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src = URL.createObjectURL(new Blob([data.audioData], { type: 'audio/webm' }));
-    
-    div.innerHTML = `<span class="text-yellow-400 font-bold text-xs">🎤 ${data.sender}</span>`;
-    div.appendChild(audio);
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-});
+
     // ===== 🎧 WebRTC صوت مباشر =====
 let peerConnections = {};
 let localStream;
 
-// تشغيل الصوت المباشر
-async function startLiveVoice() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        socket.emit("joinVoice", { roomId: currentRoom });
 
-    } catch (e) {
-        console.error("خطأ الصوت المباشر", e);
-    }
-}
-
-// إنشاء اتصال مع كل لاعب
-socket.on("updatePlayers", players => {
-    players.forEach(async (p) => {
-        if (p.id === myId) return;
-
-        const pc = new RTCPeerConnection();
-
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-        pc.ontrack = (event) => {
-            const audio = document.createElement("audio");
-            audio.srcObject = event.streams[0];
-            audio.autoplay = true;
-            document.body.appendChild(audio);
-        };
-
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                socket.emit("webrtc-ice-candidate", {
-                    roomId: currentRoom,
-                    candidate: event.candidate
-                });
-            }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        socket.emit("webrtc-offer", {
-            roomId: currentRoom,
-            offer: offer
-        });
-
-        peerConnections[p.id] = pc;
-    });
-});
 
 // استقبال Offer
 socket.on("webrtc-offer", async ({ offer, from }) => {
@@ -781,7 +698,11 @@ socket.on("webrtc-answer", async ({ answer, from }) => {
 
 // ICE
 socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
-    peerConnections[from].addIceCandidate(new RTCIceCandidate(candidate));
+    if (peerConnections[from]) {
+        peerConnections[from].addIceCandidate(
+            new RTCIceCandidate(candidate)
+        );
+    }
 });
    socket.on("voteUpdate", (data) => {
     voteCounts = data.tally || {};
