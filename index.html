@@ -514,7 +514,7 @@ socket.on("joinedRoomSuccess", (data) => {
     document.getElementById("chat-area").classList.remove("hidden");
     document.getElementById("voice-setup").classList.remove("hidden");
     initializeAudio();
-    startLiveVoice();
+    startLiveVoice();// ✅ اسم صحيح
 });
 
 // ✅ استقبال الخطأ مع تفاصيل
@@ -523,14 +523,7 @@ socket.on("joinError", (msg) => {
     alert("❌ فشل الدخول:\n" + msg); 
 });
 
-// ✅ تأكيد نجاح الانضمام قبل تشغيل الصوت
-socket.on("joinedRoomSuccess", (data) => {
-    console.log("✅ تم الانضمام بنجاح:", data);
-    document.getElementById("chat-area").classList.remove("hidden");
-    document.getElementById("setup-area").classList.add("hidden");
-    initializeAudio();
-    startLiveVoice();  // ✅ اسم صحيح
-});
+
 
 // ✅ إصلاح عند تلقي أدوار اللعب
 socket.on("roleAssigned", role => {
