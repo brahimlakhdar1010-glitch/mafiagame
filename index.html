@@ -376,7 +376,7 @@ socket.on("phaseUpdate", phase => {
 
     refreshUI();
 }); 
-انشاء اتصال مع كل لاعب//  
+// انشاء اتصال مع كل لاعب
 socket.on("updatePlayers", players => {
     const list = document.getElementById("players-list");
     list.innerHTML = "";
