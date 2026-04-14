@@ -194,8 +194,10 @@ h1 {
   max-width:100%;
   max-height:100%;
 ">
-    <div id="loading" class="hidden">جارٍ تحميل اللعبة...</div>
-<div id="game-content" style="display:none;">
+     </div>   
+    <div id="loading" class="hidden">جارٍ تحميل اللعبة...
+    </div>
+<div id="game-content" class="hidden">
     <div class="max-w-xl mx-auto text-center card p-4">
     
     <h1 class="text-2xl md:text-3xl font-bold mb-4 bg-gradient-to-r from-blue-500 to-green-400 text-transparent bg-clip-text">
@@ -777,7 +779,7 @@ socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
 
         setTimeout(() => {
             splash.style.display = "none";
-            document.getElementById("game-content").classList.remove("hidden");
+            document.getElementById("game-content").style.display = "block";
         }, 1000);
 
     }, 5000);
