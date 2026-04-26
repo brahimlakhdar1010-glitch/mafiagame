@@ -605,8 +605,8 @@ micBtn.addEventListener('mousedown', startRecording);
 document.addEventListener('mouseup', stopRecording);
 
 // دعم الهاتف 📱
-micBtn.addEventListener('mouseup', startRecording);
-document.addEventListener('touchend', stopRecording);
+micBtn.addEventListener('mousedown', startRecording);
+document.addEventListener('mouseup', stopRecording);
 
 function startRecording() {
     if (!isRecording && mediaRecorder && !isDead) {
