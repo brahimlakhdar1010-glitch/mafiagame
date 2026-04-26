@@ -21,7 +21,7 @@ app.get('/', (req, res) => {
 let rooms = {};
 
 function generateRoomId() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(10 + Math.random() * 900).toString();
 }
 
 function assignRoles(players, mafiaCount = 1) {
