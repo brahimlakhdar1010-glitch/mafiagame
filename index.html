@@ -600,12 +600,10 @@ async function initializeAudio() {
     }
 }
 
-// تشغيل الميكروفون عند الضغط
-micBtn.addEventListener('mousedown', startRecording);
-document.addEventListener('mouseup', stopRecording);
+
 
 // دعم الهاتف 📱
-micBtn.addEventListener('touchstart', startRecording);
+micBtn.addEventListener('mouseup', startRecording);
 document.addEventListener('touchend', stopRecording);
 
 function startRecording() {
@@ -638,7 +636,7 @@ function startVolumeMonitor() {
         if (!isRecording) return;
         analyser.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        volumeBar.style.width = (average / 255 * 100) + '%';
+       volumeBar.style.width = Math.min(100, (average * 1.5)) + '%';
         requestAnimationFrame(monitor);
     }
     monitor();
@@ -663,17 +661,7 @@ socket.on("receiveVoiceMessage", (data) => {
 let peerConnections = {};
 let localStream;
 
-// تشغيل الصوت المباشر
-async function startLiveVoice() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        socket.emit("joinVoice", { roomId: currentRoom });
-
-    } catch (e) {
-        console.error("خطأ الصوت المباشر", e);
-    }
-}
 
 // إنشاء اتصال مع كل لاعب
 socket.on("updatePlayers", players => {
