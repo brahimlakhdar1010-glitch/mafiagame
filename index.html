@@ -601,8 +601,8 @@ async function initializeAudio() {
 }
 
 // تشغيل الميكروفون عند الضغط
-micBtn.addEventListener('mousedown', startRecording);
-document.addEventListener('mouseup', stopRecording);
+micBtn.addEventListener('mouseup', startRecording);
+document.addEventListener('touchend', stopRecording);
 
 // دعم الهاتف 📱
 micBtn.addEventListener('mouseup', startRecording);
