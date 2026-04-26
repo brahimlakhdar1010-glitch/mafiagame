@@ -600,10 +600,12 @@ async function initializeAudio() {
     }
 }
 
-
+// تشغيل الميكروفون عند الضغط
+micBtn.addEventListener('mousedown', startRecording);
+document.addEventListener('mouseup', stopRecording);
 
 // دعم الهاتف 📱
-micBtn.addEventListener('touchstart', startRecording);
+micBtn.addEventListener('mouseup', startRecording);
 document.addEventListener('touchend', stopRecording);
 
 function startRecording() {
