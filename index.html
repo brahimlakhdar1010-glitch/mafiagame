@@ -276,515 +276,245 @@ placeholder="عدد المافيا">
         <button id="end-day-btn" onclick="endDay()" class="bg-yellow-600 w-full py-2 rounded hidden font-bold">إنهاء التصويت مبكراً</button>
     </div>
 </div>
-
-<script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-    let voteCounts = {};
-let voteDetails = {};
-    socket.on("mafiaCount", (count) => {
-    const div = document.getElementById("mafia-count-display");
-    div.textContent = "عدد المافيا: " + count;
-    div.classList.remove("hidden");
-});
-let currentRoom, myId, myRole, isDead = false, currentPhase = "lobby";
 
-// ===== متغيرات الصوت =====
-let mediaRecorder;
-let audioContext;
-let analyser;
-let microphone;
-let isRecording = false;
-let recordedChunks = [];
+/* ================== STATE ================== */
+let state = {
+    room: null,
+    id: null,
+    role: null,
+    dead: false,
+    phase: "lobby",
+    votes: {},
+    voteDetails: {},
+    peerConnections: {},
+    localStream: null
+};
 
-const micBtn = document.getElementById('mic-btn');
-const volumeBar = document.getElementById('volume-bar');
-const voiceStatusText = document.getElementById('voice-status-text');
-const voiceSetup = document.getElementById('voice-setup');
+/* ================== SOCKET INIT ================== */
+socket.on("connect", () => state.id = socket.id);
 
-function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
+socket.on("joinError", alert);
 
-socket.on("connect", () => { myId = socket.id; });
-socket.on("joinError", (msg) => { 
-    alert(msg); 
-});
-socket.on("timerUpdate", (timeLeft) => {
-    const timerDiv = document.getElementById("timer-display");
-    timerDiv.classList.remove("hidden");
-    timerDiv.textContent = formatTime(timeLeft);
+socket.on("roomCreated", d => {
+    state.room = d.roomId;
+    alert("غرفة رقم: " + d.roomId);
+    initAudio();
 });
 
-socket.on("newsUpdate", msg => {
-    const bar = document.getElementById("news-bar");
-    bar.classList.remove("hidden");
-    bar.textContent = msg;
-    setTimeout(() => bar.classList.add("hidden"), 10000);
-});
-    
+/* ================== JOIN ================== */
+socket.on("joinedRoomSuccess", (data) => {
+    state.room = data.roomId;
 
+    document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("chat-area").classList.remove("hidden");
+    document.getElementById("voice-setup").classList.remove("hidden");
+
+    initAudio();
+    startVoice();
+});
+
+/* ================== ROLE ================== */
+socket.on("roleAssigned", role => {
+    state.role = role;
+
+    const roles = {
+        mafia: "مافيا 👿",
+        doctor: "طبيب 👨‍⚕️",
+        police: "شرطي 👮",
+        citizen: "مواطن 👤"
+    };
+
+    document.getElementById("my-role").textContent = "دورك: " + roles[role];
+
+    document.getElementById("setup-area").classList.add("hidden");
+    document.getElementById("controls").classList.remove("hidden");
+    document.getElementById("chat-area").classList.remove("hidden");
+});
+
+/* ================== PHASE ================== */
 socket.on("phaseUpdate", phase => {
-    currentPhase = phase;
-    const pText = { "lobby": "الانتظار", "night": "الليل 🌙", "day": "النهار ☀️" };
-    document.getElementById("phase-text").textContent = pText[phase];
-    
-    const endDayBtn = document.getElementById("end-day-btn");
-    if (phase === "day") endDayBtn.classList.remove("hidden");
-    else endDayBtn.classList.add("hidden");
+    state.phase = phase;
 
-    refreshUI();
+    const map = {
+        lobby: "الانتظار",
+        night: "الليل 🌙",
+        day: "النهار ☀️"
+    };
+
+    document.getElementById("phase-text").textContent = map[phase];
 });
 
+/* ================== PLAYERS ================== */
 socket.on("updatePlayers", players => {
     const list = document.getElementById("players-list");
     list.innerHTML = "";
-    
-    const me = players.find(p => p.id === myId);
-    if (me && me.dead) {
-        isDead = true;
-        document.getElementById("chat-input").disabled = true;
-        document.getElementById("chat-input").placeholder = "أنت ميت...";
-    }
 
     players.forEach(p => {
         const li = document.createElement("li");
-        li.className = `flex justify-between items-center p-3 bg-gray-800 border border-gray-700 rounded shadow-sm ${p.dead ? 'dead' : ''}`;
-       const votes = voteCounts[p.id] ? ` (${voteCounts[p.id]} 🗳)` : "";
-li.innerHTML = `<span class="font-medium">${p.username}${votes} ${p.dead ? '☠' : ''}</span>`;
-        
-        if (!isDead && !p.dead && currentPhase !== "lobby") {
-            const btn = document.createElement("button");
-            btn.className = "px-3 py-1 rounded text-xs font-bold";
-            
-            if (currentPhase === "night") {
-                if (myRole === "mafia") { btn.textContent = "اغتيال"; btn.className += " bg-red-700"; btn.onclick = () => sendAction(p.id, 'mafia'); }
-                else if (myRole === "doctor") { btn.textContent = "حماية"; btn.className += " bg-green-600"; btn.onclick = () => sendAction(p.id, 'doctor'); }
-                else if (myRole === "police") { btn.textContent = "تحقيق"; btn.className += " bg-blue-600"; btn.onclick = () => sendAction(p.id, 'police'); }
-                else { btn.style.display = "none"; }
-            } else if (currentPhase === "day") {
-                btn.textContent = "تصويت";
-                btn.className += " bg-orange-600";
-                btn.onclick = () => sendVote(p.id);
-            }
-            li.appendChild(btn);
-        }
+
+        const votes = state.votes[p.id] || 0;
+
+        li.innerHTML = `
+            <span>${p.username} ${votes ? `(${votes})` : ""} ${p.dead ? "☠" : ""}</span>
+        `;
+
         list.appendChild(li);
     });
-    // عرض تفاصيل التصويت
-const log = document.getElementById("votes-log");
-log.innerHTML = "";
 
-Object.entries(voteDetails).forEach(([voter, target]) => {
-    const voterName = players.find(p => p.id === voter)?.username || voter;
-    const targetName = players.find(p => p.id === target)?.username || target;
-
-    const div = document.createElement("div");
-    div.textContent = `${voterName} صوت على➜ ${targetName}`;
-    log.appendChild(div);
-});
+    // 🔥 WebRTC (مرة وحدة لكل لاعب)
+    players.forEach(p => {
+        if (p.id !== state.id && !state.peerConnections[p.id]) {
+            createPeer(p.id);
+        }
+    });
 });
 
-function sendMessage() {
-    const input = document.getElementById("chat-input");
-    const msg = input.value.trim();
-    if (msg && !isDead && currentRoom) {
-        socket.emit("chatMessage", { roomId: currentRoom, msg: msg });
-        input.value = "";
-    }
-}
-function sendMafiaMessage() {
-    const input = document.getElementById("mafia-input");
-    const msg = input.value.trim();
-    if (msg && myRole === "mafia" && currentPhase === "night") {
-        socket.emit("mafiaMessage", { roomId: currentRoom, msg });
-        input.value = "";
-    }
-}
+/* ================== CHAT ================== */
 socket.on("receiveMessage", data => {
     const box = document.getElementById("chat-box");
+
     const div = document.createElement("div");
-    div.className = "border-b border-gray-800 py-1";
-    div.innerHTML = `<span class="text-yellow-400 font-bold text-xs">${data.user}:</span> <span class="text-gray-200">${data.msg}</span>`;
+    div.innerHTML = `<b>${data.user}:</b> ${data.msg}`;
+
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 });
-socket.on("receiveMafiaMessage", data => {
-    const box = document.getElementById("mafia-box");
-    const div = document.createElement("div");
-    div.innerHTML = `<b>${data.user}:</b> ${data.msg}`;
-    box.appendChild(div);
-});
-function sendAction(targetId, type) {
-    socket.emit("action", { roomId: currentRoom, targetId, type });
-    alert("تم تنفيذ المهمة!");
-}
 
-function sendVote(targetId) {
-    socket.emit("vote", { roomId: currentRoom, targetId });
-    alert("تم التصويت!");
-}
-function refreshUI() {
-    if (isDead) {
-        document.getElementById("my-role").innerHTML = `<span class="text-red-500">ميت ☠</span>`;
-        document.getElementById("controls").classList.add("hidden");
-    }
-
-    // دردشة المافيا
-    const mafiaChat = document.getElementById("mafia-chat");
-    if (myRole === "mafia" && currentPhase === "night" && !isDead) {
-        mafiaChat.classList.remove("hidden");
-    } else {
-        mafiaChat.classList.add("hidden");
-    }
-}
-
-socket.on("roleAssigned", role => {
-    myRole = role;
-    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
-    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
-    document.getElementById("setup-area").classList.add("hidden");
-    document.getElementById("controls").classList.remove("hidden");
-    document.getElementById("start-btn").classList.add("hidden");
-    document.getElementById("chat-area").classList.remove("hidden");
+/* ================== VOTES ================== */
+socket.on("voteUpdate", data => {
+    state.votes = data.tally || {};
+    state.voteDetails = data.detailedVotes || {};
 });
 
-function createRoom() {
-    const user = document.getElementById("username").value;
-    if(!user) return alert("ادخل اسمك أولاً");
-    socket.emit("createRoom", { username: user, password: document.getElementById("password").value });
-    document.getElementById("controls").classList.remove("hidden");
-}
-// ✅ إصلاح استدعاء الدالة الصحيح
-function joinRoom() { 
-    const roomId = document.getElementById("roomId").value.trim(); // ✅ إزالة المسافات
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
-    
-    if(!roomId) return alert("ادخل رقم الغرفة أولاً ❌");
-    if(!username) return alert("ادخل اسمك أولاً ❌");
-    
-    console.log(`🔍 محاولة الدخول للغرفة: ${roomId}`);
-    
-    currentRoom = roomId; 
-    socket.emit("joinRoom", { 
-        roomId: roomId, 
-        username: username, 
-        password: password 
-    });
-}
+/* ================== AUDIO ================== */
+let mediaRecorder, chunks = [];
 
-// ✅ استقبال النجاح
-socket.on("joinedRoomSuccess", (data) => {
-    console.log("✅ تم الانضمام بنجاح:", data);
-    alert("✅ تم الانضمام للغرفة: " + data.roomId);
-    document.getElementById("setup-area").classList.add("hidden");
-    document.getElementById("chat-area").classList.remove("hidden");
-    document.getElementById("voice-setup").classList.remove("hidden");
-    initializeAudio();
-    startLiveVoice();
-});
-
-// ✅ استقبال الخطأ مع تفاصيل
-socket.on("joinError", (msg) => { 
-    console.error("❌ خطأ:", msg);
-    alert("❌ فشل الدخول:\n" + msg); 
-});
-
-// ✅ تأكيد نجاح الانضمام قبل تشغيل الصوت
-socket.on("joinedRoomSuccess", (data) => {
-    console.log("✅ تم الانضمام بنجاح:", data);
-    document.getElementById("chat-area").classList.remove("hidden");
-    document.getElementById("setup-area").classList.add("hidden");
-    initializeAudio();
-    startLiveVoice();  // ✅ اسم صحيح
-});
-
-// ✅ إصلاح عند تلقي أدوار اللعب
-socket.on("roleAssigned", role => {
-    myRole = role;
-    const rolesAr = { "mafia": "مافيا 👿", "doctor": "طبيب 👨‍⚕️", "police": "شرطي 👮", "citizen": "مواطن 👤" };
-    document.getElementById("my-role").textContent = "دورك: " + rolesAr[role];
-    document.getElementById("setup-area").classList.add("hidden");
-    document.getElementById("controls").classList.remove("hidden");
-    document.getElementById("start-btn").classList.add("hidden");
-    document.getElementById("chat-area").classList.remove("hidden");
-    document.getElementById("voice-setup").classList.remove("hidden");
-});
-
-
-function startGame() {
-    const mafiaCount = document.getElementById("mafia-count").value;
-    socket.emit("startGame", { roomId: currentRoom, mafiaCount: Number(mafiaCount) });
-}
-function endDay() { 
-  if (isDead) {
-    alert("❌ لا يمكنك إنهاء التصويت، أنت ميت!");
-    return;
-  }
-
-  if (!currentRoom) {
-    alert("❌ الغرفة غير محددة");
-    return;
-  }
-
-  // ✅ إضافة التأكيد هنا
-  const confirmEnd = confirm("⚠️ هل أنت متأكد من إنهاء التصويت مبكراً؟");
-
-  if (!confirmEnd) return;
-
-  socket.emit("endDay", currentRoom); 
-}
-
-socket.on("roomCreated", d => { 
-    currentRoom = d.roomId; 
-    alert("غرفة رقم: " + d.roomId);
-    initializeAudio();
-});
-
-socket.on("gameOver", winner => { 
-    alert("انتهت اللعبة! الفائز: " + winner); 
-    location.reload(); 
-});
-
-// ===== نظام الصوت الاحترافي =====
-async function initializeAudio() {
+async function initAudio() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: { 
-                echoCancellation: true, 
-                noiseSuppression: true,
-                autoGainControl: true 
-            } 
-        });
-        
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        
-        microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-        
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) recordedChunks.push(e.data);
-        };
-        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+
         mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
-            recordedChunks = [];
-            
-            if (currentRoom && !isDead) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    socket.emit("voiceMessage", {
-                        roomId: currentRoom,
-                        audioData: reader.result,
-                        sender: document.getElementById("username").value
-                    });
-                };
-                reader.readAsArrayBuffer(audioBlob);
-            }
+            const blob = new Blob(chunks);
+            chunks = [];
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                socket.emit("voiceMessage", {
+                    roomId: state.room,
+                    audioData: reader.result
+                });
+            };
+            reader.readAsArrayBuffer(blob);
         };
-        
-        voiceSetup.classList.remove('hidden');
-        voiceStatusText.textContent = '✅ الميكروفون جاهز';
-        console.log('✅ الصوت جاهز');
-    } catch (err) {
-        console.error('❌ خطأ الميكروفون:', err);
-        voiceStatusText.textContent = '❌ لم يتم تفعيل الميكروفون';
-        alert('يرجى السماح باستخدام الميكروفون');
+
+    } catch {
+        alert("❌ الميكروفون مرفوض");
     }
 }
 
-// تشغيل الميكروفون عند الضغط
-micBtn.addEventListener('mousedown', startRecording);
-document.addEventListener('mouseup', stopRecording);
-
-// دعم الهاتف 📱
-micBtn.addEventListener('touchstart', startRecording);
-document.addEventListener('touchend', stopRecording);
-
+/* ================== RECORD ================== */
 function startRecording() {
-    if (!isRecording && mediaRecorder && !isDead) {
-        isRecording = true;
-        recordedChunks = [];
-        mediaRecorder.start();
-        micBtn.classList.add('recording');
-        voiceStatusText.textContent = '🔴 جاري التسجيل...';
-        startVolumeMonitor();
-    }
+    if (!mediaRecorder || state.dead) return;
+    chunks = [];
+    mediaRecorder.start();
 }
 
 function stopRecording() {
-    if (isRecording && mediaRecorder) {
-        isRecording = false;
-        mediaRecorder.stop();
-        micBtn.classList.remove('recording');
-        voiceStatusText.textContent = '✅ جاري الإرسال...';
-        setTimeout(() => { 
-            voiceStatusText.textContent = '✅ الميكروفون جاهز'; 
-        }, 1500);
-    }
-}
-// رصد مستوى الصوت
-function startVolumeMonitor() {
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    
-    function monitor() {
-        if (!isRecording) return;
-        analyser.getByteFrequencyData(dataArray);
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        volumeBar.style.width = (average / 255 * 100) + '%';
-        requestAnimationFrame(monitor);
-    }
-    monitor();
+    if (mediaRecorder) mediaRecorder.stop();
 }
 
-// استقبال الرسائل الصوتية
-socket.on("receiveVoiceMessage", (data) => {
-    const box = document.getElementById("chat-box");
-    const div = document.createElement("div");
-    div.className = "voice-message";
-    
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src = URL.createObjectURL(new Blob([data.audioData], { type: 'audio/webm' }));
-    
-    div.innerHTML = `<span class="text-yellow-400 font-bold text-xs">🎤 ${data.sender}</span>`;
-    div.appendChild(audio);
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-});
-    // ===== 🎧 WebRTC صوت مباشر =====
-let peerConnections = {};
-let localStream;
-
-// تشغيل الصوت المباشر
-async function startLiveVoice() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-        socket.emit("joinVoice", { roomId: currentRoom });
-
-    } catch (e) {
-        console.error("خطأ الصوت المباشر", e);
-    }
+/* ================== WEBRTC ================== */
+async function startVoice() {
+    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    socket.emit("joinVoice", { roomId: state.room });
 }
 
-// إنشاء اتصال مع كل لاعب
-socket.on("updatePlayers", players => {
-    players.forEach(async (p) => {
-        if (p.id === myId) return;
+async function createPeer(id) {
+    const pc = new RTCPeerConnection();
+    state.peerConnections[id] = pc;
 
-        const pc = new RTCPeerConnection();
+    state.localStream.getTracks().forEach(t => pc.addTrack(t, state.localStream));
 
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    pc.ontrack = e => {
+        const audio = document.createElement("audio");
+        audio.srcObject = e.streams[0];
+        audio.autoplay = true;
+        document.body.appendChild(audio);
+    };
 
-        pc.ontrack = (event) => {
-            const audio = document.createElement("audio");
-            audio.srcObject = event.streams[0];
-            audio.autoplay = true;
-            document.body.appendChild(audio);
-        };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                socket.emit("webrtc-ice-candidate", {
-                    roomId: currentRoom,
-                    candidate: event.candidate
-                });
-            }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        socket.emit("webrtc-offer", {
-            roomId: currentRoom,
-            offer: offer
-        });
-
-        peerConnections[p.id] = pc;
+    socket.emit("webrtc-offer", {
+        roomId: state.room,
+        offer
     });
-});
+}
 
-// استقبال Offer
 socket.on("webrtc-offer", async ({ offer, from }) => {
     const pc = new RTCPeerConnection();
+    state.peerConnections[from] = pc;
 
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    state.localStream.getTracks().forEach(t => pc.addTrack(t, state.localStream));
 
     await pc.setRemoteDescription(offer);
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-
     socket.emit("webrtc-answer", {
-        roomId: currentRoom,
-        answer: answer
+        roomId: state.room,
+        answer
+    });
+});
+
+socket.on("webrtc-answer", async ({ answer, from }) => {
+    await state.peerConnections[from]?.setRemoteDescription(answer);
+});
+
+/* ================== ACTIONS ================== */
+function createRoom() {
+    const user = document.getElementById("username").value;
+    if (!user) return alert("ادخل اسمك");
+
+    socket.emit("createRoom", { username: user });
+}
+
+function joinRoom() {
+    const roomId = document.getElementById("roomId").value;
+    const username = document.getElementById("username").value;
+
+    if (!roomId || !username) return alert("❌ بيانات ناقصة");
+
+    state.room = roomId;
+
+    socket.emit("joinRoom", {
+        roomId,
+        username
+    });
+}
+
+function sendMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value.trim();
+
+    if (!msg) return;
+
+    socket.emit("chatMessage", {
+        roomId: state.room,
+        msg
     });
 
-    pc.ontrack = (event) => {
-        const audio = document.createElement("audio");
-        audio.srcObject = event.streams[0];
-        audio.autoplay = true;
-        document.body.appendChild(audio);
-    };
-
-    peerConnections[from] = pc;
-});
-
-// استقبال Answer
-socket.on("webrtc-answer", async ({ answer, from }) => {
-    await peerConnections[from].setRemoteDescription(answer);
-});
-
-// ICE
-socket.on("webrtc-ice-candidate", ({ candidate, from }) => {
-    peerConnections[from].addIceCandidate(new RTCIceCandidate(candidate));
-});
-   socket.on("voteUpdate", (data) => {
-    voteCounts = data.tally || {};
-    voteDetails = data.detailedVotes || {};
-
-    // 🔥 هذا السطر هو الحل
-    socket.emit("getPlayersUpdate");
-});  
-    function shareGame() {
-    if (!currentRoom) {
-        alert("❌ يجب إنشاء غرفة أولاً");
-        return;
-    }
-
-    const link = `${window.location.origin}?room=${currentRoom}`;
-
-    navigator.clipboard.writeText(link)
-        .then(() => {
-            alert("✅ تم نسخ رابط الغرفة! أرسله لأصدقائك 🎉");
-        })
-        .catch(() => {
-            alert("❌ لم يتم النسخ");
-        });
+    input.value = "";
 }
-  window.addEventListener("load", () => {
-    setTimeout(() => {
-        const splash = document.getElementById("splash-screen");
-        splash.style.transition = "opacity 1s";
-        splash.style.opacity = "0";
-
-        setTimeout(() => {
-            splash.style.display = "none";
-            document.getElementById("game-content").style.display = "block";
-        }, 1000);
-
-    }, 5000);
-});  
 </script>
+
 </div>
 </div>        
 </body>
